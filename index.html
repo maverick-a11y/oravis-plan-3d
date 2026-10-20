@@ -1667,9 +1667,180 @@ function buildCarousel(g, prim, o) {
   const L = new THREE.PointLight('#ffc67a', 6, 0, 2); L.position.set(0, 1.9, 0); g.add(L);
 }
 
+/* Carrousel Nostalgie (1886) — ORAVIS rental: Ø 4 m, h 3 m, 13 personnes.
+   Red/cream striped base, red ornate column with gold crown, arched painted panels on a red frieze,
+   bulb-ringed medallions at the corners, tasselled lambrequin with a row of bulbs, striped roof and mast. */
+const ZEBRA_MAT = fixed(new THREE.MeshStandardMaterial({ roughness: 0.55, map: canvasTex(128, 64, (x, w, h) => { x.fillStyle = '#f1ece2'; x.fillRect(0, 0, w, h); x.fillStyle = '#1b1b1b'; for (let i = 0; i < 12; i++) x.fillRect(i * 11 + 2, 0, 5, h); }) }));
+const ELEPH_MAT = fixed(new THREE.MeshStandardMaterial({ color: '#4d4a46', roughness: 0.6 }));
+function carHorseN(g) { carHorse(g); box(g, 0.4, 0.2, 0.32, CAR.blue, 0, 1.06, -0.02); }   // blue & red caparison
+function carZebra(g) {
+  carHorse(g);
+  g.traverse((c) => { if (c.isMesh && c.material === CAR.ivory) c.material = ZEBRA_MAT; });
+  g.traverse((c) => { if (c.isMesh && c.material === CAR.gold) c.material = CAR.dark; });
+}
+function carElephant(g) {
+  const E = ELEPH_MAT;
+  ell(g, E, 1, 0.28, 0.27, 0.46, 0, 0.72, 0);
+  ell(g, E, 0.2, 1, 1.05, 1, 0, 0.92, 0.42);
+  for (const sd of [-1, 1]) { const ear = ell(g, E, 1, 0.03, 0.2, 0.16, sd * 0.2, 0.92, 0.36); ear.rotation.y = sd * 0.5; }
+  const trunk = new THREE.CatmullRomCurve3([[0, 0.86, 0.6], [0, 0.6, 0.7], [0, 0.35, 0.74], [0, 0.22, 0.82]].map((p) => new THREE.Vector3(...p)));
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(trunk, 16, 0.05, 8), E));
+  for (const sd of [-1, 1]) limb(g, CAR.ivory, [sd * 0.08, 0.8, 0.58], [sd * 0.1, 0.62, 0.74], 0.025, 0.01);   // tusks
+  for (const [x, z] of [[-0.15, 0.24], [0.15, 0.24], [-0.15, -0.24], [0.15, -0.24]]) limb(g, E, [x, 0.6, z], [x, 0.04, z], 0.09, 0.085);
+  box(g, 0.48, 0.06, 0.4, CAR.red, 0, 1.0, -0.05); box(g, 0.56, 0.3, 0.44, CAR.gold, 0, 0.86, -0.05);
+}
+function carRomanChariot(g) {   // red bucket seat on two big black wheels
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.5, 20, 1, true, -PI * 0.75, PI * 1.5), CAR.red);
+  seat.material = new THREE.MeshStandardMaterial({ color: '#b3231c', roughness: 0.5, side: THREE.DoubleSide }); seat.position.set(0, 0.62, -0.05); g.add(seat);
+  cyl(g, 0.31, 0.31, 0.04, CAR.red, 0, 0.42, -0.05, 20);
+  box(g, 0.5, 0.08, 0.36, CAR.ivory, 0, 0.5, -0.05);
+  const rimTorus = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.02, 6, 32, PI * 1.5), CAR.gold); rimTorus.rotation.set(PI / 2, 0, PI * 0.75); rimTorus.position.set(0, 0.87, -0.05); g.add(rimTorus);
+  for (const sd of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 8, 28), CAR.dark); w.rotation.y = PI / 2; w.position.set(sd * 0.38, 0.3, -0.12); g.add(w);
+    for (let k = 0; k < 6; k++) { const s = limb(g, CAR.dark, [sd * 0.38, 0.3, -0.12], [sd * 0.38, 0.3 + Math.cos(k * PI / 3) * 0.27, -0.12 + Math.sin(k * PI / 3) * 0.27], 0.012); }
+  }
+  limb(g, CAR.gold, [0, 0.42, 0.25], [0, 0.55, 0.7], 0.025);   // draw bar
+  const fw = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 20), CAR.dark); fw.rotation.y = PI / 2; fw.position.set(0, 0.12, 0.38); g.add(fw);
+}
+function carShellSeat(g) {   // white scalloped shell seat, red interior
+  box(g, 0.7, 0.4, 0.5, CAR.ivory, 0, 0.3, 0);
+  box(g, 0.6, 0.1, 0.4, CAR.red, 0, 0.52, 0.02);
+  const back = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 24, 1, false, -PI / 2, PI), CAR.ivory);
+  back.rotation.x = PI / 2; back.position.set(0, 0.62, -0.24); g.add(back);
+  box(g, 0.56, 0.36, 0.03, CAR.red, 0, 0.72, -0.2);
+  for (let i = 0; i < 7; i++) { const a = -PI / 2 + (i + 0.5) * PI / 7; sph(g, 0.06, CAR.ivory, Math.sin(a) * 0.38, 0.62 + Math.cos(a) * 0.38, -0.24); }
+  for (const sd of [-1, 1]) box(g, 0.06, 0.3, 0.46, CAR.ivory, sd * 0.33, 0.62, 0);
+}
+
+const SKIRT_N = canvasTex(1024, 128, (x, w, h) => {
+  for (let i = 0; i < 32; i++) { x.fillStyle = i % 2 ? '#efe2c4' : '#b3231c'; x.fillRect(i * w / 32, 0, w / 32 + 1, h); }
+  x.fillStyle = '#c9a04a'; x.fillRect(0, 0, w, 12); x.fillRect(0, h - 8, w, 8);
+}, 2);
+// lambrequin: gold scroll band with red and gold tassels hanging below (transparent between tassels)
+const LAMBREQ = canvasTex(512, 128, (x, w, h) => {
+  x.fillStyle = '#b3231c'; x.fillRect(0, 0, w, 52);
+  x.strokeStyle = '#d4a94e'; x.lineWidth = 6;
+  for (let i = 0; i < 8; i++) { x.beginPath(); x.moveTo(i * 64, 40); x.bezierCurveTo(i * 64 + 16, 6, i * 64 + 48, 6, i * 64 + 64, 40); x.stroke(); }
+  x.fillStyle = '#d4a94e'; x.fillRect(0, 0, w, 6); x.fillRect(0, 48, w, 6);
+  for (let i = 0; i < 32; i++) {
+    const cx = i * 16 + 8;
+    x.fillStyle = i % 2 ? '#d4a94e' : '#cf2f2a';
+    x.beginPath(); x.moveTo(cx - 6, 54); x.lineTo(cx + 6, 54); x.lineTo(cx + 3, 96); x.lineTo(cx - 3, 96); x.fill();
+    x.beginPath(); x.arc(cx, 98, 5, 0, PI * 2); x.fill();
+  }
+}, 3);
+LAMBREQ.wrapS = THREE.RepeatWrapping;
+// arched panels: painted scenes in gold frames, one carrying the carousel's sign
+function archPanel(kind) {
+  return canvasTex(512, 220, (x, w, h) => {
+    x.beginPath(); x.moveTo(10, h - 6); x.lineTo(10, 70); x.quadraticCurveTo(w / 2, -40, w - 10, 70); x.lineTo(w - 10, h - 6); x.closePath();
+    x.save(); x.clip();
+    if (kind === 'sign') {
+      const gr = x.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2f6f5e'); gr.addColorStop(1, '#1d4d42');
+      x.fillStyle = gr; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#e9cf8a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = '700 30px Georgia, serif'; x.fillText('MINIATUR', w / 2, 62);
+      x.font = 'italic 700 48px Georgia, serif'; x.fillText('Dampf Carroussel', w / 2, 122);
+      x.font = '700 24px Georgia, serif'; x.fillText('Anno', 70, 110); x.fillText('1886', w - 66, 96);
+    } else {
+      const sky = x.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#7fa7c2'); sky.addColorStop(0.6, '#d7d2b4'); sky.addColorStop(1, '#4f6d3c');
+      x.fillStyle = sky; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#3d5a34'; x.beginPath(); x.moveTo(0, 170); x.quadraticCurveTo(160, 120, 300, 160); x.quadraticCurveTo(420, 190, 512, 140); x.lineTo(512, 220); x.lineTo(0, 220); x.fill();
+      x.fillStyle = '#e8e2d2'; x.fillRect(300, 110, 70, 50); x.fillStyle = '#7c3a2a'; x.beginPath(); x.moveTo(292, 112); x.lineTo(335, 82); x.lineTo(378, 112); x.fill();
+    }
+    x.restore();
+    x.strokeStyle = '#d4a94e'; x.lineWidth = 14;
+    x.beginPath(); x.moveTo(10, h - 6); x.lineTo(10, 70); x.quadraticCurveTo(w / 2, -40, w - 10, 70); x.lineTo(w - 10, h - 6); x.closePath(); x.stroke();
+  });
+}
+const ARCH_SIGN = archPanel('sign'), ARCH_SCENE = archPanel('scene');
+const MEDAL_N = canvasTex(128, 128, (x) => {
+  x.fillStyle = '#d4a94e'; x.beginPath(); x.arc(64, 64, 63, 0, PI * 2); x.fill();
+  x.fillStyle = '#1f3f7a'; x.beginPath(); x.arc(64, 64, 52, 0, PI * 2); x.fill();
+  x.fillStyle = '#f0e2bf'; x.beginPath(); x.arc(64, 64, 34, 0, PI * 2); x.fill();
+  x.fillStyle = '#2b4f9e'; x.beginPath();
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * PI * 2, r = i % 2 ? 9 : 30; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+  x.fill();
+});
+
+function buildCarouselN(g) {
+  const R = 2.0, DECK = 0.4;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.36, 64, 1, true), new THREE.MeshStandardMaterial({ map: SKIRT_N, roughness: 0.5 }));
+  base.position.y = 0.18; g.add(base);
+  cyl(g, R - 0.01, R - 0.01, 0.34, CAR.dark, 0, 0.17, 0, 48);
+  const rot = new THREE.Group(); rot.name = 'carRot'; g.add(rot);
+  cyl(rot, R + 0.03, R + 0.03, 0.05, CAR.deck, 0, DECK - 0.01, 0, 64);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.03, 0.025, 8, 72), CAR.gold); rim.rotation.x = PI / 2; rim.position.y = DECK + 0.015; rot.add(rim);
+  // column: red lower body with gold scrolls, gold crown, red upper drum with blue cabochons
+  cyl(rot, 0.4, 0.46, 1.05, CAR.red, 0, DECK + 0.525, 0, 8);
+  cyl(rot, 0.5, 0.5, 0.1, CAR.gold, 0, DECK + 0.05, 0, 8);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * PI * 2 + PI / 8; const s = box(rot, 0.18, 0.6, 0.03, CAR.gold, Math.sin(a) * 0.43, DECK + 0.55, Math.cos(a) * 0.43); s.rotation.y = a; }
+  cyl(rot, 0.5, 0.42, 0.12, CAR.gold, 0, DECK + 1.11, 0, 8);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * PI * 2, c = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), CAR.gold); c.position.set(Math.sin(a) * 0.44, DECK + 1.27, Math.cos(a) * 0.44); rot.add(c); }
+  cyl(rot, 0.28, 0.3, 0.12, CAR.gold, 0, DECK + 1.25, 0, 16);
+  cyl(rot, 0.36, 0.3, 0.42, CAR.red, 0, DECK + 1.52, 0, 8);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * PI * 2; sph(rot, 0.045, CAR.blue, Math.sin(a) * 0.35, DECK + 1.55, Math.cos(a) * 0.35); }
+  cyl(rot, 0.44, 0.38, 0.1, CAR.gold, 0, DECK + 1.78, 0, 8);
+  // candy-striped pole leaning out from the column
+  const candy = new THREE.Mesh(stick([0.2, DECK + 0.6, 0.1], [0.75, DECK + 1.65, 0.35], 0.025), new THREE.MeshStandardMaterial({ map: canvasTex(16, 128, (x, w, h) => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f5f0e6' : '#cf2f2a'; x.fillRect(0, i * h / 8, w, h / 8); } }), roughness: 0.5 }));
+  rot.add(candy);
+  // twisted brass posts on the outer ring
+  const posts = 12, PR = 1.86, top = 2.15;
+  for (let i = 0; i < posts; i++) {
+    const a = (i / posts) * PI * 2 + PI / posts, x = Math.sin(a) * PR, z = Math.cos(a) * PR;
+    cyl(rot, 0.022, 0.022, top - DECK, CAR.gold, x, (top + DECK) / 2, z, 10);
+    for (let k = 1; k < 16; k++) cyl(rot, 0.03, 0.03, 0.018, CAR.gold, x, DECK + k * (top - DECK) / 16, z, 10);
+  }
+  // under-canopy ceiling + bulb row, tasselled lambrequin
+  cyl(rot, 1.95, 1.95, 0.03, CAR.red, 0, 2.17, 0, 64);
+  const lam = new THREE.Mesh(new THREE.CylinderGeometry(1.96, 1.96, 0.3, 64, 1, true), new THREE.MeshStandardMaterial({ map: LAMBREQ, roughness: 0.6, side: THREE.DoubleSide, alphaTest: 0.5 }));
+  lam.position.y = 2.03; rot.add(lam);
+  const bulbs = [];
+  for (let i = 0; i < 44; i++) { const a = (i / 44) * PI * 2; bulbs.push([Math.sin(a) * 1.82, 2.12, Math.cos(a) * 1.82]); }
+  // frieze: red octagonal band with arched panels; bulb-ringed medallions at the corners
+  const FR = 1.8, fy = 2.4, FH = 0.42, sideW = 2 * FR * Math.tan(PI / 8);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * PI * 2;
+    const band = box(rot, sideW, FH + 0.08, 0.04, CAR.red, Math.sin(a) * (FR - 0.03), fy, Math.cos(a) * (FR - 0.03)); band.rotation.y = a;
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(sideW * 0.72, FH * 0.92), new THREE.MeshStandardMaterial({ map: i % 4 === 0 ? ARCH_SIGN : ARCH_SCENE, roughness: 0.5, transparent: true, alphaTest: 0.1 }));
+    p.position.set(Math.sin(a) * (FR - 0.005), fy, Math.cos(a) * (FR - 0.005)); p.rotation.y = a; rot.add(p);
+    const trim = box(rot, sideW, 0.05, 0.06, CAR.gold, Math.sin(a) * (FR - 0.02), fy - FH / 2 - 0.02, Math.cos(a) * (FR - 0.02)); trim.rotation.y = a;
+    const ma = a + PI / 8, md = FR / Math.cos(PI / 8) + 0.06;
+    const mx = Math.sin(ma) * md, mz = Math.cos(ma) * md;
+    const med = new THREE.Mesh(new THREE.CircleGeometry(0.2, 32), new THREE.MeshStandardMaterial({ map: MEDAL_N, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide }));
+    med.position.set(mx, fy + 0.02, mz); med.rotation.y = ma; rot.add(med);
+    for (let k = 0; k < 10; k++) { const b = (k / 10) * PI * 2, r = 0.17; bulbs.push([mx + Math.cos(ma) * Math.cos(b) * r + Math.sin(ma) * 0.02, fy + 0.02 + Math.sin(b) * r, mz - Math.sin(ma) * Math.cos(b) * r + Math.cos(ma) * 0.02]); }
+    const drape = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 8), CAR.gold); drape.rotation.x = PI; drape.position.set(mx, fy - 0.3, mz); rot.add(drape);
+  }
+  const inst = new THREE.InstancedMesh(GLOBE, MAT.globe, bulbs.length), m4 = new THREE.Matrix4();
+  bulbs.forEach((b, i) => inst.setMatrixAt(i, m4.makeScale(1.3, 1.3, 1.3).setPosition(...b)));
+  inst.userData.noShadow = true; rot.add(inst);
+  // roof and striped mast
+  const stripes = new THREE.MeshStandardMaterial({ map: STRIPES, roughness: 0.75, side: THREE.DoubleSide });
+  cyl(rot, 1.82, 1.82, 0.04, CAR.gold, 0, 2.62, 0, 48);
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 1.82, 0.38, 48, 1, true), stripes); roof.position.y = 2.82; rot.add(roof);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.22, 16), new THREE.MeshStandardMaterial({ map: STRIPES, roughness: 0.6 })); mast.position.y = 3.0; rot.add(mast);
+  // 11 figures (13 places: the shell seat and the chariot take two)
+  const FIG = [carHorseN, carElephant, carHorseN, carMonkey, carShellSeat, carHorseN, carTiger, carZebra, carHorseN, carPig, carRomanChariot];
+  const FRAD = 1.4;
+  FIG.forEach((fn, i) => {
+    const a = (i / FIG.length) * PI * 2, f = new THREE.Group();
+    fn(f);
+    f.scale.setScalar(0.92);
+    f.position.set(Math.sin(a) * FRAD, DECK, Math.cos(a) * FRAD);
+    f.rotation.y = a + PI / 2;
+    if (fn === carHorseN || fn === carZebra) {
+      f.userData.bob = { y: DECK - 0.1, ph: i * 1.1 };
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.95, 10), CAR.gold); pole.position.set(0, 1.0, 0); f.add(pole);
+    }
+    rot.add(f);
+  });
+  const L = new THREE.PointLight('#ffc67a', 8, 0, 2); L.position.set(0, 2.0, 0); g.add(L);
+}
+
 function animateCarousels(t) {
   for (const o of objects) {
-    if (o.userData.kind !== 'carousel' || !o.visible || o.userData.opts?.dancing === false) continue;
+    if (!o.userData.kind.startsWith('carousel') || !o.visible || o.userData.opts?.dancing === false) continue;
     const rot = o.getObjectByName('carRot');
     rot.rotation.y = t * 0.42;
     for (const f of rot.children) if (f.userData.bob) f.position.y = f.userData.bob.y + 0.1 + Math.sin(t * 1.7 + f.userData.bob.ph) * 0.12;
@@ -2127,6 +2298,12 @@ const KINDS = {
     build: buildCarousel,
     quote: () => ({ carrousel: 1 }),
   },
+  carouselN: {
+    label: 'Carrousel Nostalgie', glyph: '✪', color: '#b3231c', noColor: true,
+    opts: { dancing: { label: 'Rotation', type: 'bool', def: true } },
+    build: buildCarouselN,
+    quote: () => ({ carrousel_nostalgie: 1 }),
+  },
   dj: {
     label: 'DJ', glyph: '♫', color: '#18191d', colorLabel: 'Façade', mat: { roughness: 0.5 },
     opts: {
@@ -2246,6 +2423,7 @@ const CATALOG = [
   ]],
   ['Animations', [
     { kind: 'carousel', label: 'Carrousel Lafayette 1893', sub: 'Ø 3,50 m · h 3 m · 11 places · 220 V 16 A' },
+    { kind: 'carouselN', label: 'Carrousel Nostalgie 1886', sub: 'Ø 4 m · h 3 m · 13 personnes · 220 V 16 A' },
   ]],
   ['Repères (hors récap)', [
     { kind: 'person', label: 'Silhouette', sub: '1,75 m · pour l\'échelle' },
@@ -2260,7 +2438,7 @@ const ITEM_DEFS = [
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
-  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
+  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
 
 const PALETTE = ['#f6f3ec', '#ece6da', '#d8c3a5', '#c9a97c', '#e0a458', '#b5838d', '#3f5e5a', '#3d5a80', '#2b2d33', '#ffffff'];
