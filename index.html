@@ -386,7 +386,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
         <div style="display:grid;gap:10px">
           <label class="row"><span id="colorLabel">Couleur</span><input id="fColor" type="color"><span></span></label>
           <div class="row"><span></span><div class="swatches" id="swatches"></div></div>
-          <div class="row" id="lightRow" hidden><span>Intensité</span><input id="fInt" type="range" min="0" max="60" step="1"><output id="vInt"></output></div>
+          <div class="row" id="lightRow" hidden><span>Intensité</span><input id="fInt" type="range" min="0" max="250" step="1"><output id="vInt"></output></div>
           <div class="row"><span>Encombrement</span><output class="wide" id="vSize"></output></div>
           <div class="row" id="infoRow" hidden><span>Éclairage</span><output class="wide" id="vInfo"></output></div>
         </div>
@@ -447,6 +447,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE = 'planevt.plan.v2';
@@ -712,7 +716,7 @@ function addFeed(g, [x, z], hook) {
   g.add(new THREE.Mesh(mergeLocal([new THREE.BoxGeometry(0.22, 0.3, 0.12).translate(x + 0.2, 0.15, z), stick([x + 0.06, 0.3, z], [x + 0.06, hook - 0.05, z], 0.006, 0.006, 5)]), MAT.black));
 }
 const BULB = shared(new THREE.SphereGeometry(0.05, 8, 6));
-MAT.bulb = fixed(new THREE.MeshBasicMaterial({ color: '#ffe0a3' }));
+MAT.bulb = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe0a3').multiplyScalar(3.2) }));
 MAT.wire = fixed(new THREE.LineBasicMaterial({ color: '#d8d2bf', transparent: true, opacity: 0.7 }));   // clear cable, like real fairy lights
 /* Guinguette run on free-standing 3 m poles, garland hooked at 2,95 m.
    zigzag = two rows of poles, the garland crossing diagonally from one row to the other;
@@ -864,7 +868,7 @@ const fairyTotals = (o) => {
 };
 const GLOBE = shared(new THREE.SphereGeometry(0.028, 12, 9));
 const SOCKET = shared(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 8));
-MAT.globe = fixed(new THREE.MeshBasicMaterial({ color: '#ffd38a' }));
+MAT.globe = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd38a').multiplyScalar(3.6) }));
 function addStringLights(g, { strands, cables }, masts, style = 'fine') {
   const wire = [], bulbs = [], gg = style === 'guinguette';
   for (const { a, b, d, len } of strands) {
@@ -891,7 +895,7 @@ function addStringLights(g, { strands, cables }, masts, style = 'fine') {
   };
   if (gg) { place(SOCKET, MAT.black, -0.025); place(GLOBE, MAT.globe, -0.07); }
   else place(BULB, MAT.bulb, 0);
-  for (const [x, y, z] of masts) { const L = new THREE.PointLight('#ffcf8a', 10, 0, 2); L.position.set(x, y - 0.3, z); g.add(L); }
+  for (const [x, y, z] of masts) { const L = new THREE.PointLight('#ffc67a', 12, 0, 2); L.position.set(x, y - 0.3, z); g.add(L); }
 }
 
 MAT.hem = fixed(new THREE.LineBasicMaterial({ color: '#2a2a2a' }));
@@ -1246,7 +1250,7 @@ function djBooth(g, prim, o) {
     box(g, 0.04, H - 0.05, Dp, face, -W / 2 + 0.02, (H - 0.05) / 2, 0);
     box(g, 0.04, H - 0.05, Dp, face, W / 2 - 0.02, (H - 0.05) / 2, 0);
     box(g, W + 0.06, 0.05, Dp + 0.06, MAT.black, 0, H - 0.025, 0);
-    const led = new THREE.MeshBasicMaterial({ color: o.led });
+    const led = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.led).multiplyScalar(2.6) });
     const strip = box(g, W - 0.1, 0.025, 0.01, led, 0, 0.06, Dp / 2 + 0.006); strip.userData.noShadow = true;
     const strip2 = box(g, W - 0.1, 0.025, 0.01, led, 0, H - 0.1, Dp / 2 + 0.006); strip2.userData.noShadow = true;
   }
@@ -1276,7 +1280,7 @@ function djBooth(g, prim, o) {
   box(lap, 0.32, 0.015, 0.22, alu, 0, 0, 0);
   const scr = new THREE.Group(); scr.position.set(0, 0.008, -0.11); scr.rotation.x = -0.3; lap.add(scr);
   box(scr, 0.32, 0.21, 0.01, alu, 0, 0.105, 0);
-  box(scr, 0.29, 0.18, 0.002, new THREE.MeshBasicMaterial({ color: '#2f4bd8' }), 0, 0.105, 0.006);
+  box(scr, 0.29, 0.18, 0.002, new THREE.MeshBasicMaterial({ color: new THREE.Color('#5a74ff').multiplyScalar(1.6) }), 0, 0.105, 0.006);
   if (o.dj) {
     const crowd = new THREE.Group(); crowd.name = 'dancers';
     const rnd = seeded(97 + W * 13);
@@ -1420,6 +1424,21 @@ const seatsOf = (q) => Object.entries(q).reduce((s, [k, v]) => s + (k.startsWith
 const SEE = { label: 'Toile transparente', type: 'bool', def: false };
 const CHAIR_COLOR = { label: 'Couleur des chaises', type: 'color', def: '#c4975c' };
 const CHAIR_MODEL = { label: 'Modèle de chaise', type: 'select', values: ['bistrot', 'medaillon', 'pliante'], names: { bistrot: 'Bistrot bois', medaillon: 'Médaillon', pliante: 'Pliante' }, def: 'bistrot' };
+// Glowing lens (HDR so it blooms) and a soft additive light cone that fades with distance and toward its edges.
+const BEAM = { strength: { value: 0.08 } };
+function lensMat(c) { return new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(4) }); }
+function beamMat(c) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: c.clone() }, uStrength: BEAM.strength },
+    vertexShader: `varying float vY; varying vec3 vN; varying vec3 vV;
+      void main() { vY = uv.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uStrength; varying float vY; varying vec3 vN; varying vec3 vV;
+      void main() { float edge = pow(abs(dot(normalize(vN), normalize(vV))), 2.0); float fall = pow(vY, 1.6);
+        gl_FragColor = vec4(uColor * uStrength * edge * fall, 1.0); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+  });
+}
+
 const KINDS = {
   tround: {
     label: 'Table ronde', glyph: '◉', color: '#f6f3ec', colorLabel: 'Nappe / plateau',
@@ -1812,7 +1831,7 @@ const KINDS = {
       const rt = guinguetteRoute(o, { poles, strands });
       if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette');
       addFeed(g, rt.start, HOOK);
-      strands.filter((_, i) => i % 3 === 1).slice(0, 6).forEach(({ a, b }) => { const L = new THREE.PointLight('#ffcf8a', 5, 0, 2); L.position.set((a[0] + b[0]) / 2, 2.4, (a[2] + b[2]) / 2); g.add(L); });
+      strands.filter((_, i) => i % 3 === 1).slice(0, 6).forEach(({ a, b }) => { const L = new THREE.PointLight('#ffc67a', 6, 0, 2); L.position.set((a[0] + b[0]) / 2, 2.4, (a[2] + b[2]) / 2); g.add(L); });
     },
     quote: (o) => { const t = guinguetteTotals(o); return { poteau_guirlande: t.poles, mat_guirlande_4m: t.masts, guinguette_m: t.buy, ampoules_guinguette: t.bulbs, piquet_hauban: t.stakes, depart_guinguette: 1 }; },
   },
@@ -1862,8 +1881,28 @@ const KINDS = {
     build: djBooth,
   },
   light: {
-    label: 'Projecteur', glyph: '✦', color: '#ffd9a8', y: 3, basic: true, light: true, noShadow: true,
-    build(g, prim) { sph(g, 0.15, prim); },
+    label: 'Projecteur', glyph: '✦', color: '#ffd9a8', y: 3, basic: true, light: true, noShadow: true, colorLabel: 'Couleur de lumière',
+    opts: {
+      mode: { label: 'Type', type: 'select', values: ['spot', 'wash'], names: { spot: 'Projecteur à faisceau', wash: 'Halo d\'ambiance' }, def: 'spot' },
+      angle: { when: (o) => o.mode === 'spot', label: 'Ouverture', type: 'select', values: [15, 25, 40, 60], suffix: '°', def: 40 },
+      beam: { when: (o) => o.mode === 'spot', label: 'Faisceau visible', type: 'bool', def: true },
+    },
+    build(g, prim, o) {
+      if (o.mode === 'wash') { const b = sph(g, 0.09, lensMat(prim.color)); b.name = 'lens'; return; }
+      // PAR can hanging from a clamp, lens facing down (−y); rotate the object to aim it.
+      const body = new THREE.MeshStandardMaterial({ color: '#16171b', roughness: 0.5, metalness: 0.5 });
+      cyl(g, 0.11, 0.13, 0.3, body, 0, 0.02, 0, 20);
+      cyl(g, 0.135, 0.135, 0.03, body, 0, -0.14, 0, 20);
+      const lens = cyl(g, 0.105, 0.105, 0.01, lensMat(prim.color), 0, -0.158, 0, 20); lens.name = 'lens';
+      box(g, 0.3, 0.025, 0.04, MAT.metal, 0, 0.2, 0); box(g, 0.025, 0.22, 0.04, MAT.metal, -0.15, 0.09, 0); box(g, 0.025, 0.22, 0.04, MAT.metal, 0.15, 0.09, 0);
+      cyl(g, 0.03, 0.03, 0.08, MAT.metal, 0, 0.25, 0, 10);
+      if (o.beam) {
+        const len = 3, r = Math.tan(THREE.MathUtils.degToRad(o.angle) / 2) * len + 0.1;
+        const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.1, r, len, 40, 1, true).translate(0, -len / 2 - 0.16, 0), beamMat(prim.color));
+        cone.name = 'beam'; cone.userData.noShadow = true; cone.renderOrder = 2;
+        g.add(cone);
+      }
+    },
     quote: () => ({ eclairage: 1 }),
   },
   person: {
@@ -2006,9 +2045,25 @@ sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
 const hemi = new THREE.HemisphereLight(0xffffff, 0x445066, 0.35);
+sun.color.set('#fff3e2');
+sun.shadow.radius = 3;
 scene.add(sun, sun.target, hemi);
 let night = false;
 const envTex = scene.environment;
+
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.35, 2.2);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+function setLook() {
+  // Day: crisp sun with a light glow on bulbs. Night: moonlit blue fill, bright bloom, visible beams.
+  Object.assign(bloom, night ? { strength: 0.9, radius: 0.55, threshold: 1.1 } : { strength: 0.45, radius: 0.35, threshold: 2.2 });
+  BEAM.strength.value = night ? 0.45 : 0.08;
+  renderer.toneMappingExposure = night ? 1.15 : 1.0;
+  sun.color.set(night ? '#7f98d6' : '#fff3e2');
+  hemi.color.set(night ? '#30406e' : '#ffffff');
+}
 
 const catcher = new THREE.Mesh(new THREE.PlaneGeometry(200, 200).rotateX(-PI / 2), new THREE.ShadowMaterial({ opacity: 0.2 }));
 catcher.receiveShadow = true;
@@ -2059,6 +2114,9 @@ function resize() {
   const w = vpEl.clientWidth, h = vpEl.clientHeight;
   if (!w || !h) return;
   renderer.setSize(w, h, false);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(w, h);
+  bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -2070,7 +2128,7 @@ renderer.setAnimationLoop(() => {
   orbit.update();
   animateDancers(danceClock.getElapsedTime());
   if (selected) selBox.box.setFromObject(selected);
-  renderer.render(scene, camera);
+  composer.render();
 });
 
 /* ---------- Venue ---------- */
@@ -2174,7 +2232,16 @@ function addObject(kind, o = {}) {
   g.visible = o.visible ?? true;
   g.userData.locked = !!o.locked;
   if (def.light) {
-    const L = new THREE.PointLight(color, o.intensity ?? 18, 0, 2);
+    const spot = opts.mode === 'spot';
+    // plans saved before the spot projector existed stored a point-light intensity; a spot needs ~2.5× to light the same floor
+    const base = o.intensity ?? (spot ? 45 : 18), I = spot && o.intensity != null && !o.opts?.mode ? base * 2.5 : base;
+    let L;
+    if (spot) {
+      L = new THREE.SpotLight(color, I, 0, THREE.MathUtils.degToRad(opts.angle) / 2, 0.45, 2);
+      L.position.set(0, -0.16, 0);
+      const T = new THREE.Object3D(); T.position.set(0, -2, 0); g.add(T); L.target = T;
+      L.castShadow = true; L.shadow.mapSize.set(1024, 1024); L.shadow.bias = -0.0006; L.shadow.normalBias = 0.02; L.shadow.camera.near = 0.2;
+    } else L = new THREE.PointLight(color, I, 0, 2);
     g.add(L);
     g.userData.light = L;
   }
@@ -2359,8 +2426,9 @@ $('#btnRedo').addEventListener('click', redo);
 function toggleNight() {
   night = !night;
   $('#btnNight').setAttribute('aria-pressed', String(night));
-  sun.intensity = night ? 0.06 : 1.5;
-  hemi.intensity = night ? 0.08 : 0.35;
+  sun.intensity = night ? 0.12 : 1.6;
+  hemi.intensity = night ? 0.07 : 0.35;
+  setLook();
   scene.environment = night ? null : envTex;
   applyTheme();
 }
@@ -2494,6 +2562,8 @@ $('#swatches').addEventListener('click', (e) => {
 function setColor(c) {
   selected.userData.prim.color.set(c);
   selected.userData.light?.color.set(c);
+  selected.getObjectByName('lens')?.material.color.set(c).multiplyScalar(4);
+  selected.getObjectByName('beam')?.material.uniforms.uColor.value.set(c);
 }
 
 const fmt = (n, d = 3) => String(+n.toFixed(d));
@@ -2875,7 +2945,7 @@ async function offer(filename, data, okMsg) {
 $('#btnPng').addEventListener('click', () => {
   const tcVis = tc.visible, sbVis = selBox.visible;
   tc.visible = false; selBox.visible = false;
-  renderer.render(scene, camera);
+  composer.render();
   renderer.domElement.toBlob((blob) => {
     tc.visible = tcVis; selBox.visible = sbVis;
     if (blob) offer(`${slug()}.png`, blob, 'Image du plan téléchargée');
