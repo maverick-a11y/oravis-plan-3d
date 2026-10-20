@@ -1838,6 +1838,89 @@ function buildCarouselN(g) {
   const L = new THREE.PointLight('#ffc67a', 8, 0, 2); L.position.set(0, 2.0, 0); g.add(L);
 }
 
+/* Floor coverings: carpet, rugs, sisal, artificial grass, wood-look vinyl, PVC, red carpet.
+   Length runs along x, width along z. Repeating materials tile at their real scale; rugs are one image stretched. */
+const FLOOR_TYPES = {
+  moquette: { name: 'Moquette', tile: 1, rough: 0.95, h: 0.008 },
+  tapis: { name: 'Tapis d\'Orient', tile: 0, rough: 0.9, h: 0.012 },
+  tapisUni: { name: 'Tapis uni à bordure', tile: 0, rough: 0.92, h: 0.012 },
+  rouge: { name: 'Tapis d\'accueil (tapis rouge)', tile: 0, rough: 0.9, h: 0.01 },
+  jonc: { name: 'Jonc de mer / sisal', tile: 0.5, rough: 0.95, h: 0.008 },
+  gazon: { name: 'Gazon synthétique', tile: 1, rough: 1, h: 0.02 },
+  vinyle: { name: 'Sol vinyle imitation bois', tile: 2, rough: 0.45, h: 0.006 },
+  pvc: { name: 'Sol PVC uni', tile: 2, rough: 0.35, h: 0.005 },
+};
+const floorCache = new Map();
+function shade(hex, k) { const c = new THREE.Color(hex); c.offsetHSL(0, 0, k); return '#' + c.getHexString(); }
+function floorTex(type, color) {
+  const key = type + color;
+  if (floorCache.has(key)) return floorCache.get(key);
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d'), rnd = seeded(7);
+  const speckle = (n, a, b, sz = 2) => { for (let i = 0; i < n; i++) { x.fillStyle = rnd() < 0.5 ? a : b; x.fillRect(rnd() * S, rnd() * S, sz, sz); } };
+  if (type === 'moquette') { x.fillStyle = color; x.fillRect(0, 0, S, S); speckle(26000, shade(color, 0.05), shade(color, -0.05)); }
+  else if (type === 'pvc') { x.fillStyle = color; x.fillRect(0, 0, S, S); speckle(3000, shade(color, 0.02), shade(color, -0.02), 3); }
+  else if (type === 'gazon') {
+    x.fillStyle = shade(color, -0.06); x.fillRect(0, 0, S, S);
+    for (let i = 0; i < 16000; i++) { x.strokeStyle = shade(color, (rnd() - 0.4) * 0.16); x.lineWidth = 1.2; const px = rnd() * S, py = rnd() * S; x.beginPath(); x.moveTo(px, py); x.lineTo(px + (rnd() - 0.5) * 4, py - 4 - rnd() * 6); x.stroke(); }
+  } else if (type === 'jonc') {
+    x.fillStyle = color; x.fillRect(0, 0, S, S);
+    const n = 16, cw = S / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const hor = (i + j) % 2 === 0;
+      for (let k = 0; k < 5; k++) { x.fillStyle = shade(color, k % 2 ? 0.05 : -0.05); if (hor) x.fillRect(i * cw, j * cw + k * cw / 5, cw, cw / 5 - 1); else x.fillRect(i * cw + k * cw / 5, j * cw, cw / 5 - 1, cw); }
+    }
+  } else if (type === 'vinyle') {
+    const pl = 8, ph = S / pl;
+    for (let r = 0; r < pl; r++) {
+      const off = (r % 3) * S / 3;
+      for (let k = -1; k < 2; k++) {
+        x.fillStyle = shade(color, (rnd() - 0.5) * 0.08); x.fillRect(off + k * S * 0.66, r * ph, S * 0.66 - 2, ph - 2);
+        for (let gx = 0; gx < 30; gx++) { x.strokeStyle = shade(color, (rnd() - 0.5) * 0.12); x.lineWidth = 1; const yy = r * ph + rnd() * ph; x.beginPath(); x.moveTo(off + k * S * 0.66, yy); x.lineTo(off + (k + 1) * S * 0.66, yy + (rnd() - 0.5) * 3); x.stroke(); }
+      }
+    }
+    x.fillStyle = shade(color, -0.2); for (let r = 0; r <= pl; r++) x.fillRect(0, r * ph - 1, S, 2);
+  } else {
+    // rugs: one image for the whole piece
+    const dark = shade(color, -0.18), light = '#e9dcc0', gold = '#c9a04a';
+    x.fillStyle = color; x.fillRect(0, 0, S, S); speckle(12000, shade(color, 0.04), shade(color, -0.04));
+    if (type === 'rouge') {
+      x.fillStyle = gold; x.fillRect(0, 26, S, 10); x.fillRect(0, S - 36, S, 10);
+    } else if (type === 'tapisUni') {
+      x.strokeStyle = dark; x.lineWidth = 40; x.strokeRect(20, 20, S - 40, S - 40);
+      x.strokeStyle = light; x.lineWidth = 6; x.strokeRect(46, 46, S - 92, S - 92);
+    } else {
+      x.strokeStyle = dark; x.lineWidth = 56; x.strokeRect(28, 28, S - 56, S - 56);
+      x.strokeStyle = light; x.lineWidth = 5; x.strokeRect(8, 8, S - 16, S - 16); x.strokeRect(60, 60, S - 120, S - 120);
+      for (let i = 0; i < 24; i++) { const t = (i + 0.5) / 24 * (S - 56) + 28; for (const [px, py] of [[t, 28], [t, S - 28], [28, t], [S - 28, t]]) { x.fillStyle = i % 2 ? light : gold; x.beginPath(); x.moveTo(px, py - 9); x.lineTo(px + 9, py); x.lineTo(px, py + 9); x.lineTo(px - 9, py); x.fill(); } }
+      x.fillStyle = dark; x.beginPath(); x.moveTo(S / 2, 110); x.lineTo(S - 150, S / 2); x.lineTo(S / 2, S - 110); x.lineTo(150, S / 2); x.closePath(); x.fill();
+      x.fillStyle = light; x.beginPath(); x.moveTo(S / 2, 150); x.lineTo(S - 190, S / 2); x.lineTo(S / 2, S - 150); x.lineTo(190, S / 2); x.closePath(); x.fill();
+      x.fillStyle = color; x.beginPath(); x.arc(S / 2, S / 2, 48, 0, PI * 2); x.fill();
+      x.fillStyle = gold; for (let i = 0; i < 8; i++) { const a = i * PI / 4; x.beginPath(); x.arc(S / 2 + Math.cos(a) * 30, S / 2 + Math.sin(a) * 30, 9, 0, PI * 2); x.fill(); }
+      for (const [px, py] of [[110, 110], [S - 110, 110], [110, S - 110], [S - 110, S - 110]]) { x.fillStyle = dark; x.beginPath(); x.arc(px, py, 26, 0, PI * 2); x.fill(); x.fillStyle = gold; x.beginPath(); x.arc(px, py, 10, 0, PI * 2); x.fill(); }
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  floorCache.set(key, t);
+  return t;
+}
+function buildFlooring(g, prim, o) {
+  const T = FLOOR_TYPES[o.type] || FLOOR_TYPES.moquette, L = o.length, W = o.width;
+  const map = floorTex(o.type in FLOOR_TYPES ? o.type : 'moquette', o.color).clone();
+  map.needsUpdate = true;
+  if (T.tile) map.repeat.set(L / T.tile, W / T.tile);
+  prim.map = map; prim.color.set('#ffffff'); prim.roughness = T.rough; prim.metalness = 0; prim.needsUpdate = true;
+  const side = new THREE.MeshStandardMaterial({ color: shade(o.color, -0.15), roughness: 0.9 });
+  box(g, L, T.h, W, side, 0, T.h / 2, 0).userData.noShadow = true;
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(L, W).rotateX(-PI / 2), prim);
+  top.position.y = T.h + 0.0005; top.userData.noShadow = true; g.add(top);
+  if (o.type === 'tapis' && o.fringe) {   // fringes on the short ends
+    const fr = new THREE.MeshStandardMaterial({ color: '#efe6d2', roughness: 0.95 });
+    for (const sd of [-1, 1]) box(g, 0.08, 0.004, W * 0.96, fr, sd * (L / 2 + 0.04), 0.002, 0).userData.noShadow = true;
+  }
+}
+
 function animateCarousels(t) {
   for (const o of objects) {
     if (!o.userData.kind.startsWith('carousel') || !o.visible || o.userData.opts?.dancing === false) continue;
@@ -2298,6 +2381,18 @@ const KINDS = {
     build: buildCarousel,
     quote: () => ({ carrousel: 1 }),
   },
+  flooring: {
+    label: 'Revêtement de sol', glyph: '▭', color: '#ffffff', noColor: true, noShadow: true,
+    opts: {
+      type: { label: 'Type de sol', type: 'select', values: Object.keys(FLOOR_TYPES), names: Object.fromEntries(Object.entries(FLOOR_TYPES).map(([k, v]) => [k, v.name])), def: 'moquette' },
+      length: { label: 'Longueur', type: 'select', values: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30], names: Object.fromEntries([1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30].map((v) => [v, String(v).replace('.', ',') + ' m'])), def: 6 },
+      width: { label: 'Largeur', type: 'select', values: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30], names: Object.fromEntries([1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30].map((v) => [v, String(v).replace('.', ',') + ' m'])), def: 4 },
+      color: { label: 'Couleur', type: 'color', def: '#7b2732' },
+      fringe: { when: (o) => o.type === 'tapis', label: 'Franges', type: 'bool', def: true },
+    },
+    build: buildFlooring,
+    quote: (o) => ({ ['sol_' + o.type]: Math.round(o.length * o.width * 100) / 100 }),
+  },
   carouselN: {
     label: 'Carrousel Nostalgie', glyph: '✪', color: '#b3231c', noColor: true,
     opts: { dancing: { label: 'Rotation', type: 'bool', def: true } },
@@ -2396,6 +2491,17 @@ const CATALOG = [
     { kind: 'dance', label: 'Piste de danse étoilée', sub: '5 × 5 m · fond noir', opts: { pattern: 'etoiles' } },
     { kind: 'bar', label: 'Comptoir bar', sub: '2,00 × 0,60 m' },
   ]],
+  ['Sols', [
+    { kind: 'flooring', label: 'Moquette', sub: '6 × 4 m · couleur au choix', opts: { type: 'moquette', color: '#3c4150' } },
+    { kind: 'flooring', label: 'Moquette rouge événement', sub: '6 × 4 m', opts: { type: 'moquette', color: '#9e1f26' } },
+    { kind: 'flooring', label: 'Tapis d\'Orient', sub: '3 × 2 m · franges', opts: { type: 'tapis', length: 3, width: 2, color: '#8a2a2b' } },
+    { kind: 'flooring', label: 'Tapis uni à bordure', sub: '3 × 2 m', opts: { type: 'tapisUni', length: 3, width: 2, color: '#d9cbb0' } },
+    { kind: 'flooring', label: 'Tapis rouge d\'accueil', sub: '10 × 1,5 m · galons or', opts: { type: 'rouge', length: 10, width: 1.5, color: '#a3161f' } },
+    { kind: 'flooring', label: 'Jonc de mer', sub: '4 × 3 m · naturel', opts: { type: 'jonc', length: 4, width: 3, color: '#c8b48a' } },
+    { kind: 'flooring', label: 'Gazon synthétique', sub: '6 × 4 m', opts: { type: 'gazon', color: '#4f8a3a' } },
+    { kind: 'flooring', label: 'Sol vinyle bois', sub: '6 × 4 m · chêne', opts: { type: 'vinyle', color: '#b08a5e' } },
+    { kind: 'flooring', label: 'Sol PVC uni', sub: '6 × 4 m · blanc', opts: { type: 'pvc', color: '#eeeeea' } },
+  ]],
   ['Décor', [
     { kind: 'arch', label: 'Arche octogonale', sub: 'Ø 2,30 m × h 2,5 m · double cadre fer or doux' },
     { kind: 'archTeak', label: 'Arche teck 4 pieds', sub: 'L 3 m × l 2 m × h 2,40 m · bois clair' },
@@ -2438,7 +2544,8 @@ const ITEM_DEFS = [
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
-  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
+  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
+  ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
 
 const PALETTE = ['#f6f3ec', '#ece6da', '#d8c3a5', '#c9a97c', '#e0a458', '#b5838d', '#3f5e5a', '#3d5a80', '#2b2d33', '#ffffff'];
