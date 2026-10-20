@@ -1912,9 +1912,14 @@ function buildFlooring(g, prim, o) {
   if (T.tile) map.repeat.set(L / T.tile, W / T.tile);
   prim.map = map; prim.color.set('#ffffff'); prim.roughness = T.rough; prim.metalness = 0; prim.needsUpdate = true;
   const side = new THREE.MeshStandardMaterial({ color: shade(o.color, -0.15), roughness: 0.9 });
-  box(g, L, T.h, W, side, 0, T.h / 2, 0).userData.noShadow = true;
+  // Only the visible edges are solid, so no two faces ever lie in the same plane (that caused flicker).
+  // polygonOffset keeps the top in front of the room floor, and rugs in front of carpet laid underneath.
+  for (const [w, d, x, z] of [[L, 0.004, 0, W / 2 - 0.002], [L, 0.004, 0, -W / 2 + 0.002], [0.004, W, L / 2 - 0.002, 0], [0.004, W, -L / 2 + 0.002, 0]])
+    box(g, w, T.h, d, side, x, T.h / 2, z).userData.noShadow = true;
+  const rug = !T.tile;
+  prim.polygonOffset = true; prim.polygonOffsetFactor = rug ? -4 : -2; prim.polygonOffsetUnits = rug ? -8 : -4;
   const top = new THREE.Mesh(new THREE.PlaneGeometry(L, W).rotateX(-PI / 2), prim);
-  top.position.y = T.h + 0.0005; top.userData.noShadow = true; g.add(top);
+  top.position.y = T.h; top.userData.noShadow = true; top.renderOrder = rug ? 2 : 1; g.add(top);
   if (o.type === 'tapis' && o.fringe) {   // fringes on the short ends
     const fr = new THREE.MeshStandardMaterial({ color: '#efe6d2', roughness: 0.95 });
     for (const sd of [-1, 1]) box(g, 0.08, 0.004, W * 0.96, fr, sd * (L / 2 + 0.04), 0.002, 0).userData.noShadow = true;
@@ -2579,7 +2584,7 @@ const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 800);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 800);
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enableDamping = true;
 orbit.maxPolarAngle = PI / 2 - 0.02;
