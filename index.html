@@ -1439,6 +1439,243 @@ const seatsOf = (q) => Object.entries(q).reduce((s, [k, v]) => s + (k.startsWith
 const SEE = { label: 'Toile transparente', type: 'bool', def: false };
 const CHAIR_COLOR = { label: 'Couleur des chaises', type: 'color', def: '#c4975c' };
 const CHAIR_MODEL = { label: 'Modèle de chaise', type: 'select', values: ['bistrot', 'medaillon', 'pliante'], names: { bistrot: 'Bistrot bois', medaillon: 'Médaillon', pliante: 'Pliante' }, def: 'bistrot' };
+/* Carrousel Lafayette (1893) — ORAVIS rental: Ø 3,5 m, h 3 m, 11 places.
+   Fixed red base with gold swags; everything above it (deck, figures, poles, column, canopy, roof) turns,
+   and the three jumping horses ride up and down. Figures face the direction of travel. */
+const CAR = {
+  ivory: fixed(new THREE.MeshStandardMaterial({ color: '#efe5d2', roughness: 0.55 })),
+  gold: fixed(new THREE.MeshStandardMaterial({ color: '#c9a04a', roughness: 0.35, metalness: 0.75 })),
+  red: fixed(new THREE.MeshStandardMaterial({ color: '#b3231c', roughness: 0.5 })),
+  blue: fixed(new THREE.MeshStandardMaterial({ color: '#1f4f9a', roughness: 0.5 })),
+  brown: fixed(new THREE.MeshStandardMaterial({ color: '#7a4a2a', roughness: 0.6 })),
+  pink: fixed(new THREE.MeshStandardMaterial({ color: '#f1ddd2', roughness: 0.55 })),
+  deck: fixed(new THREE.MeshStandardMaterial({ color: '#9a7b58', roughness: 0.7 })),
+  dark: fixed(new THREE.MeshStandardMaterial({ color: '#1a1410', roughness: 0.4 })),
+  orange: fixed(new THREE.MeshStandardMaterial({ color: '#d0772e', roughness: 0.55 })),
+};
+function canvasTex(w, h, draw, repeatX = 1) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  if (repeatX !== 1) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = repeatX; }
+  return t;
+}
+const STRIPES = canvasTex(256, 64, (x, w, h) => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f6f1e8' : '#cf2f2a'; x.fillRect(i * w / 8, 0, w / 8 + 1, h); } }, 4);
+// scalloped valance: stripes with a wavy lower edge (transparent below the scallops) and a red trim
+const VALANCE = canvasTex(512, 128, (x, w, h) => {
+  const n = 16, sw = w / n, r = sw / 2, band = h - r - 4;
+  for (let i = 0; i < n; i++) {
+    x.fillStyle = i % 2 ? '#f6f1e8' : '#cf2f2a';
+    x.fillRect(i * sw, 0, sw + 1, band);
+    x.beginPath(); x.arc(i * sw + r, band, r, 0, PI); x.fill();   // one rounded tongue under each stripe
+  }
+  x.fillStyle = '#cf2f2a'; x.fillRect(0, 0, w, 10);
+}, 3);
+VALANCE.wrapS = THREE.RepeatWrapping;
+// lower base: red skirt with gold swags
+const SKIRT = canvasTex(1024, 128, (x, w, h) => {
+  x.fillStyle = '#b3231c'; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#d4a94e'; x.fillRect(0, 0, w, 14);
+  x.strokeStyle = '#d9b25a'; x.lineWidth = 10; x.lineCap = 'round';
+  const n = 12, sw = w / n;
+  for (let i = 0; i < n; i++) {
+    x.beginPath(); x.moveTo(i * sw + 6, 22); x.quadraticCurveTo(i * sw + sw / 2, 92, i * sw + sw - 6, 22); x.stroke();
+    x.beginPath(); x.moveTo(i * sw + 14, 22); x.quadraticCurveTo(i * sw + sw / 2, 70, i * sw + sw - 14, 22); x.stroke();
+    x.fillStyle = '#e1bd66'; x.beginPath(); x.arc(i * sw + 4, 26, 9, 0, PI * 2); x.fill();
+  }
+}, 2);
+// frieze panels: the blue sign and painted landscapes, each framed in gold
+function panelTex(kind) {
+  return canvasTex(512, 200, (x, w, h) => {
+    if (kind === 'sign') {
+      x.fillStyle = '#1f4f9a'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#f2ead8'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'italic 700 46px Georgia, serif'; x.fillText('LAFAYETTE', w / 2, 52);
+      x.font = '700 30px Georgia, serif'; x.fillText('1893', w / 2, 98);
+      x.font = 'italic 700 46px Georgia, serif'; x.fillText('CAROUSEL', w / 2, 146);
+    } else {
+      const sky = x.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#9cc3d6'); sky.addColorStop(0.55, '#e8d9b6'); sky.addColorStop(1, '#7c9a55');
+      x.fillStyle = sky; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#6f8c4a'; x.beginPath(); x.moveTo(0, 150); x.quadraticCurveTo(140, 100, 280, 140); x.quadraticCurveTo(400, 170, 512, 120); x.lineTo(512, 200); x.lineTo(0, 200); x.fill();
+      x.fillStyle = '#c0533c'; x.beginPath(); x.ellipse(256, 80, 70, 20, 0, 0, PI * 2); x.fill();   // a little airship
+    }
+    x.strokeStyle = '#d4a94e'; x.lineWidth = 16; x.strokeRect(8, 8, w - 16, h - 16);
+  });
+}
+const PANEL_SIGN = panelTex('sign'), PANEL_SCENE = panelTex('scene');
+const MEDAL = canvasTex(128, 128, (x, w) => {
+  x.fillStyle = '#d4a94e'; x.beginPath(); x.arc(64, 64, 63, 0, PI * 2); x.fill();
+  x.fillStyle = '#1f4f9a'; x.beginPath(); x.arc(64, 64, 54, 0, PI * 2); x.fill();
+  x.fillStyle = '#e8c477'; x.beginPath(); x.arc(64, 64, 42, 0, PI * 2); x.fill();
+  x.fillStyle = '#c62a22'; x.beginPath();
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * PI * 2, r = i % 2 ? 12 : 36; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+  x.fill();
+});
+
+const ell = (parent, mat, r, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); parent.add(m); return m; };
+const limb = (parent, mat, a, b, r0, r1 = r0) => { const m = new THREE.Mesh(stick(a, b, r0, r1, 8), mat); parent.add(m); return m; };
+
+// Figures are built facing +z, standing on y = 0 (the deck).
+function carHorse(g) {
+  const W = CAR.ivory;
+  ell(g, W, 1, 0.17, 0.19, 0.4, 0, 0.98, 0);                                   // body
+  limb(g, W, [0, 1.05, 0.3], [0, 1.38, 0.5], 0.1, 0.075);                      // neck
+  const head = ell(g, W, 1, 0.075, 0.09, 0.2, 0, 1.42, 0.62); head.rotation.x = 0.55;
+  for (const sd of [-1, 1]) { const e = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 6), W); e.position.set(sd * 0.04, 1.56, 0.5); g.add(e); }
+  limb(g, CAR.gold, [0, 1.48, 0.42], [0, 1.08, 0.28], 0.035, 0.05);           // mane
+  limb(g, W, [-0.08, 0.95, 0.3], [-0.09, 0.82, 0.55], 0.04); limb(g, W, [-0.09, 0.82, 0.55], [-0.08, 0.62, 0.5], 0.03);   // front legs, prancing
+  limb(g, W, [0.08, 0.95, 0.3], [0.09, 0.78, 0.5], 0.04); limb(g, W, [0.09, 0.78, 0.5], [0.08, 0.58, 0.42], 0.03);
+  limb(g, W, [-0.08, 0.9, -0.3], [-0.09, 0.6, -0.5], 0.045, 0.03); limb(g, W, [0.08, 0.9, -0.3], [0.09, 0.62, -0.55], 0.045, 0.03); // hind legs stretched back
+  limb(g, CAR.gold, [0, 1.02, -0.38], [0, 0.72, -0.62], 0.04, 0.015);         // tail
+  box(g, 0.36, 0.05, 0.26, CAR.red, 0, 1.18, -0.02);                           // saddle
+  box(g, 0.38, 0.18, 0.3, CAR.gold, 0, 1.06, -0.02).scale.set(1, 1, 1);        // saddle cloth
+  box(g, 0.05, 0.14, 0.12, CAR.blue, 0, 1.26, -0.13);                          // cantle
+}
+function carPig(g) {
+  const W = CAR.pink;
+  ell(g, W, 1, 0.24, 0.23, 0.4, 0, 0.52, 0);
+  ell(g, W, 0.17, 1, 1, 1, 0, 0.6, 0.42);
+  cyl(g, 0.07, 0.07, 0.06, W, 0, 0.56, 0.58).rotation.x = PI / 2;
+  for (const sd of [-1, 1]) { const e = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 6), W); e.position.set(sd * 0.1, 0.77, 0.4); e.rotation.z = -sd * 0.4; g.add(e); }
+  for (const [x, z] of [[-0.12, 0.22], [0.12, 0.22], [-0.12, -0.22], [0.12, -0.22]]) limb(g, W, [x, 0.42, z], [x, 0.04, z], 0.055, 0.045);
+  box(g, 0.42, 0.06, 0.34, CAR.red, 0, 0.75, -0.04); box(g, 0.44, 0.2, 0.36, CAR.blue, 0, 0.64, -0.04);
+}
+function carBear(g) {
+  const W = CAR.ivory;
+  ell(g, W, 1, 0.24, 0.24, 0.44, 0, 0.62, 0);
+  ell(g, W, 0.17, 1, 1, 1.1, 0, 0.78, 0.44); ell(g, W, 0.08, 1, 0.8, 1.1, 0, 0.73, 0.6);
+  sph(g, 0.03, CAR.dark, 0, 0.75, 0.68);
+  for (const sd of [-1, 1]) sph(g, 0.055, W, sd * 0.11, 0.93, 0.42);
+  for (const [x, z] of [[-0.13, 0.25], [0.13, 0.25], [-0.13, -0.25], [0.13, -0.25]]) limb(g, W, [x, 0.5, z], [x, 0.04, z], 0.07, 0.06);
+  box(g, 0.44, 0.06, 0.36, CAR.red, 0, 0.88, -0.05); box(g, 0.46, 0.22, 0.4, CAR.gold, 0, 0.76, -0.05);
+}
+const TIGER = canvasTex(128, 64, (x, w, h) => { x.fillStyle = '#d0772e'; x.fillRect(0, 0, w, h); x.fillStyle = '#2a1a10'; for (let i = 0; i < 10; i++) x.fillRect(i * 13 + 3, 0, 4, h); });
+const TIGER_MAT = fixed(new THREE.MeshStandardMaterial({ map: TIGER, roughness: 0.55 }));
+function carTiger(g) {
+  ell(g, TIGER_MAT, 1, 0.2, 0.2, 0.46, 0, 0.62, 0);
+  ell(g, CAR.orange, 0.15, 1, 0.95, 1.1, 0, 0.8, 0.48);
+  ell(g, CAR.ivory, 0.07, 1.1, 0.8, 1, 0, 0.75, 0.6);
+  for (const sd of [-1, 1]) sph(g, 0.045, CAR.orange, sd * 0.1, 0.93, 0.45);
+  for (const [x, z] of [[-0.11, 0.28], [0.11, 0.28], [-0.11, -0.28], [0.11, -0.28]]) limb(g, CAR.orange, [x, 0.52, z], [x, 0.04, z], 0.06, 0.05);
+  limb(g, CAR.orange, [0, 0.66, -0.44], [0, 0.95, -0.7], 0.03, 0.02);
+  box(g, 0.4, 0.06, 0.34, CAR.red, 0, 0.84, -0.05); box(g, 0.42, 0.2, 0.38, CAR.blue, 0, 0.73, -0.05);
+}
+function carMonkey(g) {   // sitting upright on a little pedestal, red jacket, blue-striped trousers
+  box(g, 0.42, 0.42, 0.42, CAR.gold, 0, 0.21, 0);
+  limb(g, CAR.red, [0, 0.45, -0.02], [0, 0.95, 0.02], 0.17, 0.14);
+  sph(g, 0.15, CAR.brown, 0, 1.12, 0.05); ell(g, CAR.pink, 0.08, 1.1, 0.8, 0.9, 0, 1.08, 0.17);
+  for (const sd of [-1, 1]) {
+    sph(g, 0.05, CAR.brown, sd * 0.15, 1.15, 0.03);
+    limb(g, CAR.ivory, [sd * 0.08, 0.5, 0.05], [sd * 0.1, 0.48, 0.38], 0.07, 0.06);
+    limb(g, CAR.ivory, [sd * 0.1, 0.48, 0.38], [sd * 0.1, 0.06, 0.42], 0.055, 0.05);
+    limb(g, CAR.red, [sd * 0.17, 0.9, 0], [sd * 0.22, 0.65, 0.2], 0.05, 0.04);
+  }
+  box(g, 0.02, 0.2, 0.02, CAR.blue, 0.08, 0.3, 0.42); box(g, 0.02, 0.2, 0.02, CAR.blue, -0.08, 0.3, 0.42);
+}
+function carSwan(g) {
+  ell(g, CAR.ivory, 1, 0.3, 0.22, 0.48, 0, 0.42, -0.05);
+  box(g, 0.4, 0.06, 0.36, CAR.red, 0, 0.6, -0.12);                             // seat
+  const curve = new THREE.CatmullRomCurve3([[0, 0.5, 0.32], [0, 0.85, 0.42], [0, 1.05, 0.26], [0, 1.18, 0.32], [0, 1.16, 0.46]].map((p) => new THREE.Vector3(...p)));
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.055, 8), CAR.ivory));
+  sph(g, 0.075, CAR.ivory, 0, 1.17, 0.47);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 8), CAR.orange); beak.rotation.x = PI / 2 + 0.3; beak.position.set(0, 1.13, 0.58); g.add(beak);
+  for (const sd of [-1, 1]) { const w = ell(g, CAR.ivory, 1, 0.06, 0.18, 0.36, sd * 0.28, 0.52, -0.12); w.rotation.z = sd * 0.35; }
+}
+function carChariot(g) {
+  box(g, 0.6, 0.38, 0.62, CAR.ivory, 0, 0.42, 0);
+  box(g, 0.62, 0.05, 0.64, CAR.gold, 0, 0.62, 0);
+  box(g, 0.64, 0.5, 0.06, CAR.red, 0, 0.82, -0.3);                             // backrest
+  box(g, 0.66, 0.06, 0.08, CAR.gold, 0, 1.08, -0.3);
+  box(g, 0.54, 0.08, 0.4, CAR.blue, 0, 0.68, -0.06);                           // cushion
+  for (const sd of [-1, 1]) box(g, 0.05, 0.22, 0.5, CAR.gold, sd * 0.31, 0.78, 0);
+  for (const [x, z] of [[-0.34, 0.2], [0.34, 0.2], [-0.34, -0.2], [0.34, -0.2]]) {
+    const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.04, 20), CAR.red); wh.rotation.z = PI / 2; wh.position.set(x, 0.15, z); g.add(wh);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 10), CAR.gold); hub.rotation.z = PI / 2; hub.position.set(x, 0.15, z); g.add(hub);
+  }
+}
+
+function buildCarousel(g, prim, o) {
+  const R = 1.75, DECK = 0.4;
+  // fixed base
+  const skirtMat = new THREE.MeshStandardMaterial({ map: SKIRT, roughness: 0.5 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.36, 48, 1, true), skirtMat); base.position.y = 0.18; g.add(base);
+  cyl(g, R - 0.01, R - 0.01, 0.34, CAR.dark, 0, 0.17, 0, 48);
+  // turning part
+  const rot = new THREE.Group(); rot.name = 'carRot'; g.add(rot);
+  cyl(rot, R + 0.04, R + 0.04, 0.05, CAR.deck, 0, DECK - 0.01, 0, 48);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.04, 0.025, 8, 64), CAR.gold); rim.rotation.x = PI / 2; rim.position.y = DECK + 0.015; rot.add(rim);
+  // central column: white with gold mouldings and red inserts
+  cyl(rot, 0.34, 0.38, 1.75, CAR.ivory, 0, DECK + 0.875, 0, 8);
+  cyl(rot, 0.42, 0.42, 0.12, CAR.gold, 0, DECK + 0.06, 0, 8);
+  cyl(rot, 0.4, 0.4, 0.08, CAR.gold, 0, DECK + 1.72, 0, 8);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * PI * 2 + PI / 8;
+    const ins = box(rot, 0.12, 1.1, 0.02, CAR.red, Math.sin(a) * 0.36, DECK + 0.9, Math.cos(a) * 0.36); ins.rotation.y = a;
+  }
+  // roof posts: gold, banded so they read as twisted brass
+  const posts = 10, PR = 1.62, top = 2.0;
+  for (let i = 0; i < posts; i++) {
+    const a = (i / posts) * PI * 2 + PI / posts;
+    const x = Math.sin(a) * PR, z = Math.cos(a) * PR;
+    cyl(rot, 0.025, 0.025, top - DECK, CAR.gold, x, (top + DECK) / 2, z, 10);
+    for (let k = 1; k < 12; k++) cyl(rot, 0.032, 0.032, 0.02, CAR.gold, x, DECK + k * (top - DECK) / 12, z, 10);
+  }
+  // lower canopy + scalloped valance
+  const stripes = new THREE.MeshStandardMaterial({ map: STRIPES, roughness: 0.75, side: THREE.DoubleSide });
+  const canopy = new THREE.Mesh(new THREE.CylinderGeometry(1.42, 1.88, 0.16, 48, 1, true), stripes); canopy.position.y = 2.06; rot.add(canopy);
+  const val = new THREE.Mesh(new THREE.CylinderGeometry(1.88, 1.88, 0.26, 64, 1, true), new THREE.MeshStandardMaterial({ map: VALANCE, roughness: 0.75, side: THREE.DoubleSide, alphaTest: 0.5 }));
+  val.position.y = 1.85; rot.add(val);
+  cyl(rot, 1.42, 1.42, 0.02, CAR.ivory, 0, 2.13, 0, 48);
+  // frieze: 8 framed panels with medallions between them, bulbs along the top edge
+  const FR = 1.38, FH = 0.42, fy = 2.36, sideW = 2 * FR * Math.tan(PI / 8);
+  const bulbs = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * PI * 2;
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(sideW * 0.82, FH), new THREE.MeshStandardMaterial({ map: i % 2 ? PANEL_SCENE : PANEL_SIGN, roughness: 0.5 }));
+    p.position.set(Math.sin(a) * FR, fy, Math.cos(a) * FR); p.rotation.y = a; rot.add(p);
+    const back = box(rot, sideW, FH + 0.06, 0.03, CAR.gold, Math.sin(a) * (FR - 0.02), fy, Math.cos(a) * (FR - 0.02)); back.rotation.y = a;
+    const ma = a + PI / 8, md = FR / Math.cos(PI / 8) + 0.02;
+    const med = new THREE.Mesh(new THREE.CircleGeometry(0.17, 28), new THREE.MeshStandardMaterial({ map: MEDAL, roughness: 0.4, metalness: 0.2 }));
+    med.position.set(Math.sin(ma) * md, fy, Math.cos(ma) * md); med.rotation.y = ma; rot.add(med);
+    for (let k = 0; k < 5; k++) { const t = (k + 0.5) / 5 - 0.5, ox = Math.cos(a) * t * sideW, oz = -Math.sin(a) * t * sideW; bulbs.push([Math.sin(a) * (FR + 0.03) + ox, fy + FH / 2 + 0.04, Math.cos(a) * (FR + 0.03) + oz]); }
+  }
+  const inst = new THREE.InstancedMesh(GLOBE, MAT.globe, bulbs.length); const m4 = new THREE.Matrix4();
+  bulbs.forEach((b, i) => inst.setMatrixAt(i, m4.makeScale(1.4, 1.4, 1.4).setPosition(...b)));
+  inst.userData.noShadow = true; rot.add(inst);
+  // conical striped roof + blue band + gold crown
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 1.45, 0.55, 48, 1, true), stripes); roof.position.y = 2.85; rot.add(roof);
+  cyl(rot, 1.45, 1.45, 0.04, CAR.gold, 0, 2.58, 0, 48);
+  cyl(rot, 0.16, 0.16, 0.12, CAR.blue, 0, 3.17, 0, 20);
+  cyl(rot, 0.18, 0.16, 0.06, CAR.gold, 0, 3.26, 0, 20);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * PI * 2, s = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 6), CAR.gold); s.position.set(Math.sin(a) * 0.16, 3.34, Math.cos(a) * 0.16); rot.add(s); }
+  sph(rot, 0.04, CAR.gold, 0, 3.32, 0);
+  // figures around the deck, heading the way the carousel turns (counter-clockwise seen from above)
+  const FIG = [carHorse, carPig, carHorse, carMonkey, carBear, carHorse, carSwan, carTiger, carChariot];
+  const FRAD = 1.2;
+  FIG.forEach((fn, i) => {
+    const a = (i / FIG.length) * PI * 2, f = new THREE.Group();
+    fn(f);
+    f.position.set(Math.sin(a) * FRAD, DECK, Math.cos(a) * FRAD);
+    f.rotation.y = a + PI / 2;
+    if (fn === carHorse) {
+      f.userData.bob = { y: DECK - 0.1, ph: i * 1.3 };
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.8, 10), CAR.gold); pole.position.set(0, 1.0, 0); f.add(pole);
+    }
+    rot.add(f);
+  });
+  // warm light from the frieze bulbs, so the carousel glows at night
+  const L = new THREE.PointLight('#ffc67a', 6, 0, 2); L.position.set(0, 1.9, 0); g.add(L);
+}
+
+function animateCarousels(t) {
+  for (const o of objects) {
+    if (o.userData.kind !== 'carousel' || !o.visible || o.userData.opts?.dancing === false) continue;
+    const rot = o.getObjectByName('carRot');
+    rot.rotation.y = t * 0.42;
+    for (const f of rot.children) if (f.userData.bob) f.position.y = f.userData.bob.y + 0.1 + Math.sin(t * 1.7 + f.userData.bob.ph) * 0.12;
+  }
+}
+
 // Glowing lens (HDR so it blooms) and a soft additive light cone that fades with distance and toward its edges.
 const BEAM = { strength: { value: 0.08 } };
 function lensMat(c) { return new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(4) }); }
@@ -1884,6 +2121,12 @@ const KINDS = {
     build(g, prim) { cyl(g, 0.02, 0.02, 1.4, MAT.metal, 0, 0.7, 0, 8); cyl(g, 0.02, 0.28, 0.4, MAT.metal, 0, 0.2, 0, 3); box(g, 0.34, 0.52, 0.3, prim, 0, 1.65, 0); },
     quote: () => ({ enceinte: 1 }),
   },
+  carousel: {
+    label: 'Carrousel Lafayette', glyph: '✪', color: '#cf2f2a', noColor: true,
+    opts: { dancing: { label: 'Rotation', type: 'bool', def: true } },
+    build: buildCarousel,
+    quote: () => ({ carrousel: 1 }),
+  },
   dj: {
     label: 'DJ', glyph: '♫', color: '#18191d', colorLabel: 'Façade', mat: { roughness: 0.5 },
     opts: {
@@ -2001,6 +2244,9 @@ const CATALOG = [
     { kind: 'speaker', label: 'Enceinte sur pied', sub: 'h 1,90 m' },
     { kind: 'light', label: 'Projecteur d\'ambiance', sub: 'éclaire la scène 3D' },
   ]],
+  ['Animations', [
+    { kind: 'carousel', label: 'Carrousel Lafayette 1893', sub: 'Ø 3,50 m · h 3 m · 11 places · 220 V 16 A' },
+  ]],
   ['Repères (hors récap)', [
     { kind: 'person', label: 'Silhouette', sub: '1,75 m · pour l\'échelle' },
     { kind: 'box', label: 'Bloc', sub: '1 × 1 × 1 m' },
@@ -2014,7 +2260,7 @@ const ITEM_DEFS = [
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
-  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['eclairage', 'Projecteur d\'ambiance'],
+  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
 
 const PALETTE = ['#f6f3ec', '#ece6da', '#d8c3a5', '#c9a97c', '#e0a458', '#b5838d', '#3f5e5a', '#3d5a80', '#2b2d33', '#ffffff'];
@@ -2141,7 +2387,9 @@ resize();
 const danceClock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   orbit.update();
-  animateDancers(danceClock.getElapsedTime());
+  const tNow = danceClock.getElapsedTime();
+  animateDancers(tNow);
+  animateCarousels(tNow);
   if (selected && keepAboveFloor(selected)) fillInspector();
   if (selected) selBox.box.setFromObject(selected);
   composer.render();
