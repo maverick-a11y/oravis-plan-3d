@@ -220,6 +220,15 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
 
 /* ---------- Viewport overlays ---------- */
 .vp-tag { position: absolute; z-index: 3; top: 78px; left: 324px; font: 500 11px var(--font-mono); color: var(--muted); pointer-events: none; padding: 4px 9px; border-radius: 999px; background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.locked-wrap { position: absolute; z-index: 4; top: 112px; left: 324px; display: grid; gap: 6px; justify-items: start; max-width: 260px; }
+.locked-wrap .btn { background: var(--glass-strong); box-shadow: var(--shadow); }
+.locked-wrap .btn svg { width: 15px; height: 15px; }
+.locked-list { list-style: none; margin: 0; padding: 6px; display: grid; gap: 2px; min-width: 220px; max-height: 50vh; overflow: auto; }
+.locked-list li { display: flex; align-items: center; gap: 4px; border-radius: 9px; }
+.locked-list li:hover { background: var(--field); }
+.locked-list .pick { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--fg); font: 500 12.5px var(--font-ui); padding: 7px 8px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.locked-list .un { background: none; border: 0; color: var(--accent); font: 500 11.5px var(--font-ui); padding: 6px 8px; cursor: pointer; border-radius: 7px; white-space: nowrap; }
+.locked-list .un:hover { background: var(--accent-soft); }
 .dock { position: absolute; z-index: 5; left: 50%; bottom: max(14px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 18px; max-width: calc(100% - 700px); overflow-x: auto; scrollbar-width: none; }
 .dock .btn { flex-direction: column; gap: 4px; padding: 7px 10px 6px; font-size: 10.5px; font-weight: 550; background: transparent; min-width: 58px; border-radius: 12px; }
 .dock .btn:hover { background: var(--field); }
@@ -253,7 +262,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
 
 /* ---------- Medium screens: narrower cards, compact dock ---------- */
 @media (max-width: 1280px) {
-  .left { width: 268px; } .right { width: 300px; } .status { width: 268px; } .vp-tag { left: 292px; }
+  .left { width: 268px; } .right { width: 300px; } .status { width: 268px; } .vp-tag { left: 292px; } .locked-wrap { left: 292px; }
   .dock { max-width: calc(100% - 600px); }
   .dock .btn { min-width: 0; }
   .dock .btn span.lbl { display: none; }
@@ -274,6 +283,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   .panel { overflow: visible; }
   .panel > [role="tabpanel"] { overflow: visible; }
   .vp-tag { display: none; }
+  .locked-wrap { top: 10px; left: 10px; }
   .btn kbd { display: none; }
 }
 @media (max-width: 480px) { .org { display: none; } }
@@ -334,6 +344,10 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
 
   <main class="viewport" id="viewport">
     <div class="vp-tag" id="vpTag">Perspective · grille 1 m</div>
+    <div class="locked-wrap" id="lockedWrap" hidden>
+      <button class="btn" type="button" id="btnLocked" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Verrouillés</span><span class="n" id="lockedN"></span></button>
+      <ul class="locked-list glass" id="lockedList" hidden></ul>
+    </div>
     <div class="vp-empty" id="vpEmpty" hidden>
       <div class="card glass">
         <strong>Le plan est vide</strong>
@@ -377,7 +391,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
     <div id="pProps" role="tabpanel">
       <div class="empty" id="inspEmpty">Aucun élément sélectionné.<br>Cliquez sur un élément dans la vue ou dans l'onglet Plan.</div>
       <form id="inspForm" class="pad" hidden autocomplete="off">
-        <p class="lockNote" id="lockNote" hidden>Élément verrouillé : il ne réagit plus aux clics dans la vue, et ses réglages sont figés. Déverrouillez-le pour le modifier.</p>
+        <p class="lockNote" id="lockNote" hidden>Élément verrouillé : les clics simples passent au travers et sa position est figée. Pour le reprendre, double-cliquez dessus ou utilisez le bouton « Verrouillés » à gauche de la vue. L'intensité de l'éclairage reste réglable.</p>
         <label class="field"><span>Nom <span class="kindtag" id="inspKind"></span></span><input id="fName" type="text" maxlength="40"></label>
         <div id="optWrap" style="display:grid;gap:10px">
           <div class="lab">Options</div>
@@ -386,6 +400,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
         <div style="display:grid;gap:10px">
           <label class="row"><span id="colorLabel">Couleur</span><input id="fColor" type="color"><span></span></label>
           <div class="row"><span></span><div class="swatches" id="swatches"></div></div>
+          <div class="row" id="lampRow" hidden><span>Éclairage</span><input id="fLamp" type="range" min="0" max="300" step="5"><output id="vLamp"></output></div>
           <div class="row" id="lightRow" hidden><span>Intensité</span><input id="fInt" type="range" min="0" max="250" step="1"><output id="vInt"></output></div>
           <div class="row"><span>Encombrement</span><output class="wide" id="vSize"></output></div>
           <div class="row" id="infoRow" hidden><span>Éclairage</span><output class="wide" id="vInfo"></output></div>
@@ -2224,7 +2239,10 @@ function addObject(kind, o = {}) {
   const g = new THREE.Group();
   def.build(g, prim, opts);
   g.traverse((c) => { if (c.isMesh) { c.castShadow = !def.noShadow && !c.userData.noShadow; c.receiveShadow = true; } });
-  g.userData = { kind, prim, opts };
+  const lamps = [];
+  g.traverse((c) => { if (c.isLight) { c.userData.base = c.intensity; lamps.push(c); } });
+  g.userData = { kind, prim, opts, lamps, lampScale: o.ls ?? 1 };
+  applyLamps(g);
   g.name = o.name ?? uniqueName(def.label);
   if (o.p) g.position.fromArray(o.p); else g.position.set(0, def.y ?? 0, 0);
   if (o.r) g.rotation.set(o.r[0], o.r[1], o.r[2]);
@@ -2249,6 +2267,11 @@ function addObject(kind, o = {}) {
   objects.push(g);
   applySee(g);
   return g;
+}
+
+function applyLamps(g) {
+  const k = g.userData.lampScale;
+  for (const L of g.userData.lamps) L.intensity = L.userData.base * k;
 }
 
 let seeAll = false;
@@ -2284,6 +2307,7 @@ function describe(g) {
   if (!g.visible) d.visible = false;
   if (g.userData.locked) d.locked = true;
   if (g.userData.light) d.intensity = g.userData.light.intensity;
+  if (g.userData.lamps.length && g.userData.lampScale !== 1) d.ls = g.userData.lampScale;
   return d;
 }
 const serialize = () => ({ v: 2, event: { ...evt }, room: { ...room }, items: objects.map(describe) });
@@ -2363,6 +2387,16 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   let g = hit?.object || null;
   while (g && !objects.includes(g)) g = g.parent;
   select(g);
+});
+
+renderer.domElement.addEventListener('dblclick', (e) => {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(objects.filter((o) => o.visible && o.userData.locked), true)[0];
+  let g = hit?.object || null;
+  while (g && !objects.includes(g)) g = g.parent;
+  if (g) { select(g); toast(`« ${g.name} » sélectionné (verrouillé)`); }
 });
 
 /* ---------- Tabs ---------- */
@@ -2514,7 +2548,30 @@ function toggleLock(o) {
   toast(o.userData.locked ? `« ${o.name} » verrouillé : les clics passent au travers.` : `« ${o.name} » déverrouillé`);
 }
 
+function renderLocked() {
+  const locked = objects.filter((o) => o.userData.locked);
+  $('#lockedWrap').hidden = !locked.length;
+  $('#lockedN').textContent = locked.length;
+  const ul = $('#lockedList');
+  ul.replaceChildren();
+  if (!locked.length) { ul.hidden = true; $('#btnLocked').setAttribute('aria-expanded', 'false'); }
+  for (const o of locked) {
+    const li = document.createElement('li');
+    li.innerHTML = '<button class="pick" type="button"></button><button class="un" type="button">Déverrouiller</button>';
+    li.querySelector('.pick').textContent = `${KINDS[o.userData.kind].glyph}  ${o.name}`;
+    li.querySelector('.pick').addEventListener('click', () => { select(o); });
+    li.querySelector('.un').addEventListener('click', () => toggleLock(o));
+    ul.append(li);
+  }
+}
+$('#btnLocked').addEventListener('click', () => {
+  const ul = $('#lockedList'), open = ul.hidden;
+  ul.hidden = !open;
+  $('#btnLocked').setAttribute('aria-expanded', String(open));
+});
+
 function renderOutliner() {
+  renderLocked();
   const ul = $('#outList');
   ul.replaceChildren();
   for (const o of objects) {
@@ -2638,11 +2695,14 @@ function fillInspector() {
   $('#swatches').parentElement.hidden = !!def.noColor;
   setVal('#fColor', '#' + g.userData.prim.color.getHexString());
   $('#lightRow').hidden = !g.userData.light;
+  $('#lampRow').hidden = !g.userData.lamps.length;
+  if (g.userData.lamps.length) { setVal('#fLamp', Math.round(g.userData.lampScale * 100)); $('#vLamp').textContent = Math.round(g.userData.lampScale * 100) + ' %'; }
   if (g.userData.light) { setVal('#fInt', g.userData.light.intensity); $('#vInt').textContent = fmt(g.userData.light.intensity, 0); }
   const lk = !!g.userData.locked;
   $('#lockNote').hidden = !lk;
   $('#btnLock').innerHTML = lk ? 'Déverrouiller <kbd>L</kbd>' : 'Verrouiller <kbd>L</kbd>';
   for (const el of $('#inspForm').querySelectorAll('#vecs input, #optRows input, #optRows select, #fColor, #fInt, #swatches button, #btnDel')) el.disabled = lk;
+  $('#fInt').disabled = false; $('#fLamp').disabled = false;
   _b.setFromObject(g).getSize(_v);
   $('#vSize').textContent = `${_v.x.toFixed(2).replace('.', ',')} × ${_v.z.toFixed(2).replace('.', ',')} m · h ${_v.y.toFixed(2).replace('.', ',')} m`;
 }
@@ -2666,6 +2726,7 @@ $('#fName').addEventListener('input', (e) => {
 });
 $('#fName').addEventListener('blur', () => fillInspector());
 $('#fColor').addEventListener('input', (e) => { if (selected) { setColor(e.target.value); renderOutliner(); } });
+$('#fLamp').addEventListener('input', (e) => { if (selected?.userData.lamps.length) { selected.userData.lampScale = +e.target.value / 100; applyLamps(selected); fillInspector(); } });
 $('#fInt').addEventListener('input', (e) => { if (selected?.userData.light) { selected.userData.light.intensity = +e.target.value; fillInspector(); } });
 
 function duplicate() {
