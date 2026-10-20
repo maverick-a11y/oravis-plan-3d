@@ -2094,7 +2094,7 @@ scene.add(selBox);
 
 const tc = new TransformControls(camera, renderer.domElement);
 tc.addEventListener('dragging-changed', (e) => { orbit.enabled = !e.value; if (!e.value) commit(); });
-tc.addEventListener('objectChange', () => fillInspector());
+tc.addEventListener('objectChange', () => { keepAboveFloor(tc.object); fillInspector(); });
 scene.add(tc);
 
 // Soft vertical sky gradient behind the scene, with matching distance haze.
@@ -2142,6 +2142,7 @@ const danceClock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   orbit.update();
   animateDancers(danceClock.getElapsedTime());
+  if (selected && keepAboveFloor(selected)) fillInspector();
   if (selected) selBox.box.setFromObject(selected);
   composer.render();
 });
@@ -2241,7 +2242,8 @@ function addObject(kind, o = {}) {
   g.traverse((c) => { if (c.isMesh) { c.castShadow = !def.noShadow && !c.userData.noShadow; c.receiveShadow = true; } });
   const lamps = [];
   g.traverse((c) => { if (c.isLight) { c.userData.base = c.intensity; lamps.push(c); } });
-  g.userData = { kind, prim, opts, lamps, lampScale: o.ls ?? 1 };
+  const natural = lowestY(g);
+  g.userData = { kind, prim, opts, lamps, lampScale: o.ls ?? 1, groundDepth: def.y == null && Number.isFinite(natural) ? Math.min(0, natural) : 0 };   // only floor-standing items may have buried parts
   applyLamps(g);
   g.name = o.name ?? uniqueName(def.label);
   if (o.p) g.position.fromArray(o.p); else g.position.set(0, def.y ?? 0, 0);
@@ -2263,10 +2265,33 @@ function addObject(kind, o = {}) {
     g.add(L);
     g.userData.light = L;
   }
+  keepAboveFloor(g);
   scene.add(g);
   objects.push(g);
   applySee(g);
   return g;
+}
+
+/* Ground rule: nothing may sink below the floor (y = 0). The lowest point of an object's meshes is measured in
+   world space (light beams excluded); parts built to go into the ground, such as tent stakes, keep their natural depth. */
+const _gb = new THREE.Box3();
+function lowestY(g) {
+  g.updateMatrixWorld(true);
+  let m = Infinity;
+  g.traverse((c) => {
+    if (!c.isMesh || c.name === 'beam' || !c.visible) return;
+    if (!c.geometry.boundingBox) c.geometry.computeBoundingBox();
+    _gb.copy(c.geometry.boundingBox).applyMatrix4(c.matrixWorld);
+    if (_gb.min.y < m) m = _gb.min.y;
+  });
+  return m;
+}
+function keepAboveFloor(g) {
+  if (!g) return false;
+  const floor = Math.min(0, g.userData.groundDepth ?? 0), low = lowestY(g);
+  if (!Number.isFinite(low) || low >= floor - 1e-4) return false;
+  g.position.y += floor - low;
+  return true;
 }
 
 function applyLamps(g) {
