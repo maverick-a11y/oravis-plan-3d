@@ -1187,11 +1187,11 @@ function poseDancer(d, t) {
   const w = t * D.ws * D.dir + D.ph;
   d.position.x = D.home[0] + Math.cos(w) * D.wr;
   d.position.z = D.home[1] + Math.sin(w) * D.wr;
-  d.rotation.y = D.face + Math.sin(t * 0.6 + D.ph) * 0.5;
+  d.rotation.y = D.face + Math.sin(t * 0.6 + D.ph) * (D.sway ?? 0.5);
   D.body.position.y = -ab * 0.045;
   D.body.rotation.z = Math.sin(b * 0.5) * 0.07;
   D.body.rotation.y = Math.sin(b * 0.5) * 0.18;
-  D.head.rotation.x = ab * 0.18 - 0.05;
+  D.head.rotation.x = D.style === 4 ? ab * 0.35 + 0.05 : ab * 0.18 - 0.05;
   D.head.rotation.z = Math.sin(b * 0.5) * 0.1;
   D.legs[0].rotation.x = s * 0.22; D.legs[1].rotation.x = -s * 0.22;
   D.legs[0].rotation.z = -0.03; D.legs[1].rotation.z = 0.03;
@@ -1206,6 +1206,14 @@ function poseDancer(d, t) {
         if (sd > 0) { S.rotation.set(-0.2, 0, 2.7 + c * 0.25); E.rotation.x = -0.2 - ab * 0.5; }
         else { S.rotation.set(0.3, 0, -0.35); E.rotation.x = -1.6; }
         break;
+      case 4: { // DJ: right hand riding the mixer, left hand alternating headphone-to-ear and fist in the air
+        const bar = Math.floor((t * BPM / 60 + D.ph) / 8) % 3;
+        if (sd > 0) { S.rotation.set(-0.5 + s * 0.06, 0.12, 0.1); E.rotation.set(-0.9 + c * 0.1, 0, 0); }
+        else if (bar === 0) { S.rotation.set(-0.15, 0, -2.2); E.rotation.set(0, 0, -2.2); }   // hand on the headphone cup
+        else if (bar === 1) { S.rotation.set(-0.2, 0, -(2.7 + ab * 0.2)); E.rotation.set(-0.3, 0, 0); }
+        else { S.rotation.set(-0.5 - c * 0.06, -0.12, -0.1); E.rotation.set(-0.9 - s * 0.1, 0, 0); }
+        break;
+      }
       default: // clapping above the head on the beat
         S.rotation.set(-2.45 - ab * 0.15, 0, sd * (0.32 - ab * 0.22)); E.rotation.x = -0.35 + ab * 0.2; break;
     }
@@ -1213,9 +1221,76 @@ function poseDancer(d, t) {
 }
 function animateDancers(t) {
   for (const o of objects) {
-    if (o.userData.kind !== 'dance' || !o.visible || o.userData.opts?.dancing === false) continue;
+    if (!o.visible || o.userData.opts?.dancing === false) continue;
     const crowd = o.getObjectByName('dancers');
     if (crowd) for (const d of crowd.children) poseDancer(d, t);
+    const spin = o.getObjectByName('spin');
+    if (spin) for (const p of spin.children) p.rotation.y = -t * 3.5;
+  }
+}
+
+/* DJ booth: façade + top, two players with jog wheels, 4-channel mixer, laptop on stand, LED strip,
+   and an optional animated DJ standing behind it (front of the booth faces +z). */
+const DJ_STYLES = { booth: 'Booth à façade', table: 'Table nappée noire', bois: 'Booth bois' };
+function djBooth(g, prim, o) {
+  const W = o.width, Dp = 0.7, H = 1.0;
+  if (o.style === 'table') {
+    box(g, W, 0.04, Dp, MAT.black, 0, H - 0.02, 0);
+    const cloth = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.95 });
+    box(g, W + 0.04, H - 0.04, 0.01, cloth, 0, (H - 0.04) / 2, Dp / 2 + 0.01);
+    box(g, 0.01, H - 0.04, Dp, cloth, -W / 2 - 0.02, (H - 0.04) / 2, 0);
+    box(g, 0.01, H - 0.04, Dp, cloth, W / 2 + 0.02, (H - 0.04) / 2, 0);
+  } else {
+    const face = prim;
+    box(g, W, H - 0.05, 0.04, face, 0, (H - 0.05) / 2, Dp / 2 - 0.02);
+    box(g, 0.04, H - 0.05, Dp, face, -W / 2 + 0.02, (H - 0.05) / 2, 0);
+    box(g, 0.04, H - 0.05, Dp, face, W / 2 - 0.02, (H - 0.05) / 2, 0);
+    box(g, W + 0.06, 0.05, Dp + 0.06, MAT.black, 0, H - 0.025, 0);
+    const led = new THREE.MeshBasicMaterial({ color: o.led });
+    const strip = box(g, W - 0.1, 0.025, 0.01, led, 0, 0.06, Dp / 2 + 0.006); strip.userData.noShadow = true;
+    const strip2 = box(g, W - 0.1, 0.025, 0.01, led, 0, H - 0.1, Dp / 2 + 0.006); strip2.userData.noShadow = true;
+  }
+  // equipment on top
+  const top = H, eq = new THREE.MeshStandardMaterial({ color: '#1b1c20', roughness: 0.45, metalness: 0.3 });
+  const plate = new THREE.MeshStandardMaterial({ color: '#2e3036', roughness: 0.3, metalness: 0.6 });
+  const spin = new THREE.Group(); spin.name = 'spin'; g.add(spin);
+  for (const x of [-0.38, 0.38]) {
+    box(g, 0.32, 0.1, 0.41, eq, x, top + 0.05, 0.02);
+    const j = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.025, 28), plate);
+    j.position.set(x, top + 0.112, 0.06); spin.add(j);
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, 0.09), MAT.bulb); mark.position.set(0, 0.014, 0.045); j.add(mark);
+    box(g, 0.24, 0.006, 0.07, MAT.globe, x, top + 0.103, -0.13);   // screen
+  }
+  box(g, 0.3, 0.11, 0.4, eq, 0, top + 0.055, 0.02);   // mixer
+  const knob = new THREE.MeshStandardMaterial({ color: '#d9dbe0', roughness: 0.4, metalness: 0.4 });
+  for (let i = 0; i < 4; i++) {
+    const x = -0.105 + i * 0.07;
+    for (let k = 0; k < 3; k++) cyl(g, 0.011, 0.011, 0.02, knob, x, top + 0.12, -0.13 + k * 0.06, 10);
+    box(g, 0.012, 0.012, 0.03, knob, x, top + 0.118, 0.13);
+  }
+  box(g, 0.08, 0.012, 0.012, knob, 0, top + 0.118, 0.19);   // crossfader
+  // laptop on a stand, behind the decks
+  cyl(g, 0.012, 0.012, 0.22, MAT.metal, 0.75, top + 0.11, -0.2, 8);
+  const lap = new THREE.Group(); lap.position.set(0.75, top + 0.22, -0.18); g.add(lap);
+  const alu = new THREE.MeshStandardMaterial({ color: '#c3c6cc', roughness: 0.3, metalness: 0.7 });
+  box(lap, 0.32, 0.015, 0.22, alu, 0, 0, 0);
+  const scr = new THREE.Group(); scr.position.set(0, 0.008, -0.11); scr.rotation.x = -0.3; lap.add(scr);
+  box(scr, 0.32, 0.21, 0.01, alu, 0, 0.105, 0);
+  box(scr, 0.29, 0.18, 0.002, new THREE.MeshBasicMaterial({ color: '#2f4bd8' }), 0, 0.105, 0.006);
+  if (o.dj) {
+    const crowd = new THREE.Group(); crowd.name = 'dancers';
+    const rnd = seeded(97 + W * 13);
+    const d = makeDancer(rnd);
+    const D = d.userData.dancer;
+    D.style = 4; D.wr = 0; D.home = [0, -0.62]; D.face = 0; D.sway = 0.12;
+    d.scale.setScalar(1);
+    d.position.set(0, 0, -0.62);
+    const hp = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.014, 8, 24, PI), MAT.black);
+    hp.position.set(0, 0.02, 0); D.head.add(hp);
+    for (const sd of [-1, 1]) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.035, 14), MAT.black); cup.rotation.z = PI / 2; cup.position.set(sd * 0.115, 0, 0); D.head.add(cup); }
+    crowd.add(d);
+    g.add(crowd);
+    poseDancer(d, 0.4);
   }
 }
 
@@ -1746,6 +1821,17 @@ const KINDS = {
     build(g, prim) { cyl(g, 0.02, 0.02, 1.4, MAT.metal, 0, 0.7, 0, 8); cyl(g, 0.02, 0.28, 0.4, MAT.metal, 0, 0.2, 0, 3); box(g, 0.34, 0.52, 0.3, prim, 0, 1.65, 0); },
     quote: () => ({ enceinte: 1 }),
   },
+  dj: {
+    label: 'DJ', glyph: '♫', color: '#18191d', colorLabel: 'Façade', mat: { roughness: 0.5 },
+    opts: {
+      style: { label: 'Modèle', type: 'select', values: Object.keys(DJ_STYLES), names: DJ_STYLES, def: 'booth' },
+      width: { label: 'Largeur', type: 'select', values: [1.8, 2, 2.4], names: { 1.8: '1,80 m', 2: '2,00 m', 2.4: '2,40 m' }, def: 2 },
+      led: { when: (o) => o.style !== 'table', label: 'Couleur LED', type: 'color', def: '#7d5cff' },
+      dj: { label: 'DJ', type: 'bool', def: true },
+      dancing: { label: 'Animation', type: 'bool', def: true },
+    },
+    build: djBooth,
+  },
   light: {
     label: 'Projecteur', glyph: '✦', color: '#ffd9a8', y: 3, basic: true, light: true, noShadow: true,
     build(g, prim) { sph(g, 0.15, prim); },
@@ -1823,6 +1909,9 @@ const CATALOG = [
     { kind: 'guinguette', label: 'Guinguette sur poteaux (ligne)', sub: 'allée de 12 m', opts: { layout: 'ligne' } },
     { kind: 'fairy', label: 'Ciel étoilé 10 × 8 m', sub: 'guirlande fine · 1 brin tous les 50 cm' },
     { kind: 'fairy', label: 'Cube lumineux 6 × 6 m', sub: 'ciel étoilé + rideaux sur 2 côtés au choix', opts: { layout: 'cube', length: 6, width: 6 } },
+    { kind: 'dj', label: 'DJ + table de mixage', sub: 'booth 2,00 × 0,70 m · platines, mixeur, DJ animé' },
+    { kind: 'dj', label: 'DJ booth bois', sub: 'façade bois clair · LED chaude', color: '#c9a97c', opts: { style: 'bois', led: '#ffb347' } },
+    { kind: 'dj', label: 'Régie DJ nappée', sub: 'table nappée noire · sans LED', opts: { style: 'table' } },
     { kind: 'speaker', label: 'Enceinte sur pied', sub: 'h 1,90 m' },
     { kind: 'light', label: 'Projecteur d\'ambiance', sub: 'éclaire la scène 3D' },
   ]],
@@ -1848,6 +1937,7 @@ const SAMPLE = (() => {
   const items = [];
   items.push({ kind: 'stage', p: [0, 0, -5.4] });
   items.push({ kind: 'dance', p: [0, 0, -0.8] });
+  items.push({ kind: 'dj', p: [0, 0.6, -5.9] });
   items.push({ kind: 'speaker', name: 'Enceinte gauche', p: [-2.3, 0, -3.6] }, { kind: 'speaker', name: 'Enceinte droite', p: [2.3, 0, -3.6] });
   let n = 1;
   for (const x of [-7.6, -4.4, 4.4, 7.6]) for (const z of [-4.4, -1.1, 2.2]) items.push({ kind: 'tround', name: `Table ${n++}`, p: [x, 0, z] });
