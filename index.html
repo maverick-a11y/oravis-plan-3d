@@ -270,21 +270,66 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
 }
 
 /* ---------- Phones / small tablets: stacked ---------- */
-@media (max-width: 960px) {
-  body { overflow: auto; }
-  .app { height: auto; display: flex; flex-direction: column; gap: 10px; padding-block: 10px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
-  .toolbar, .panel, .status, .dock, .vp-rot, .vp-tag { position: static; transform: none; width: auto; max-width: none; }
-  .viewport { position: relative; height: 60svh; border-radius: var(--radius); order: 1; }
-  .toolbar { order: 0; }
-  .dock { order: 2; justify-content: flex-start; }
-  .vp-rot { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); }
-  .toolbar .vsep { display: none; }
-  .right { order: 3; } .left { order: 4; } .status { order: 5; }
-  .panel { overflow: visible; }
-  .panel > [role="tabpanel"] { overflow: visible; }
-  .vp-tag { display: none; }
-  .locked-wrap { top: 10px; left: 10px; }
-  .btn kbd { display: none; }
+/* Desktop: mobile-only controls stay hidden */
+.mtabs, .msel, .sheet-head, #btnMore { display: none; }
+
+/* ---------- Phones & tablets: full-screen 3D, bottom tab bar, slide-up sheets ---------- */
+@media (max-width: 1100px), (pointer: coarse) and (max-width: 1400px) {
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  .app { height: 100dvh; }
+  .viewport { position: fixed; inset: 0; }
+  .viewport canvas { touch-action: none; }
+  .btn { min-height: 40px; }
+  .btn kbd, .vp-tag, .status, .vsep, .vp-rot { display: none !important; }
+
+  .toolbar { top: max(8px, env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); min-height: 50px; padding: 5px 6px 5px 8px; gap: 6px; }
+  .toolbar .brand { font-size: 0; gap: 0; }
+  .toolbar .org { display: none; }
+  #btnMore { display: inline-flex; }
+  .toolbar .m-more { display: none !important; }
+  .toolbar.more-open { flex-wrap: wrap; }
+  .toolbar.more-open .m-more { display: flex !important; }
+  .toolbar.more-open .tgroup.m-more { order: 10; flex-basis: 100%; padding: 6px 0 2px; }
+  .toolbar .btn .lbl { display: inline; }
+
+  .mtabs {
+    display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; z-index: 40; left: 0; right: 0; bottom: 0;
+    padding: 6px max(8px, env(safe-area-inset-right, 0px)) max(6px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    background: var(--glass-strong); backdrop-filter: blur(22px) saturate(1.6); -webkit-backdrop-filter: blur(22px) saturate(1.6); border-top: 1px solid var(--line);
+  }
+  .mtabs button { display: grid; justify-items: center; gap: 3px; background: none; border: 0; color: var(--muted); font: 600 11px var(--font-ui); padding: 6px 2px; border-radius: 12px; cursor: pointer; position: relative; }
+  .mtabs button svg { width: 22px; height: 22px; }
+  .mtabs button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+  .mtabs .dot { position: absolute; top: 4px; right: calc(50% - 18px); min-width: 16px; height: 16px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font: 600 10px/16px var(--font-mono); padding: 0 4px; }
+  .mtabs .dot:empty { display: none; }
+
+  .panel { position: fixed; z-index: 35; left: max(0px, env(safe-area-inset-left, 0px)); right: max(0px, env(safe-area-inset-right, 0px)); top: auto !important;
+    bottom: calc(62px + env(safe-area-inset-bottom, 0px)); width: auto !important; height: min(66svh, 640px); border-radius: 20px 20px 0 0;
+    transform: translateY(calc(100% + 90px)); transition: transform 0.28s cubic-bezier(.2,.8,.2,1), visibility 0s linear 0.28s; visibility: hidden; }
+  .panel.open { transform: none; visibility: visible; transition-delay: 0s; }
+  .sheet-head { display: flex; align-items: center; justify-content: center; position: relative; padding: 8px 8px 0; flex: none; }
+  .sheet-head .grab { width: 42px; height: 5px; border-radius: 3px; background: var(--line); background: rgba(127,127,127,.35); }
+  .sheet-head .sheet-x { position: absolute; right: 8px; top: 4px; min-height: 34px; padding: 6px 10px; }
+  .cat-item { padding: 10px 8px; }
+  .cat-item .plus { opacity: 1; }
+  .row { grid-template-columns: 104px minmax(0, 1fr) 44px; }
+  .row input[type="range"] { height: 28px; }
+
+  .dock { position: fixed; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    transform: none; max-width: none; justify-content: flex-start; padding: 5px; border-radius: 16px; }
+  .dock .btn .lbl { display: none; }
+  .dock .btn { padding: 9px 11px; }
+  .msel { display: flex; align-items: center; gap: 4px; position: fixed; z-index: 30; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: calc(128px + env(safe-area-inset-bottom, 0px)); padding: 5px 5px 5px 12px; border-radius: 16px; overflow-x: auto; scrollbar-width: none; }
+  .msel[hidden] { display: none; }
+  .msel .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; margin-right: auto; padding-right: 6px; }
+  .msel .btn { padding: 8px 10px; background: transparent; flex: none; }
+  .msel .btn.danger { color: var(--danger); }
+  body.sheet-up .dock, body.sheet-up .msel { display: none; }
+
+  .locked-wrap { top: calc(68px + env(safe-area-inset-top, 0px)); left: 10px; }
+  .vp-empty { padding-bottom: 140px; }
+  .toast { top: calc(66px + env(safe-area-inset-top, 0px)); }
 }
 @media (max-width: 480px) { .org { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -310,6 +355,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
       </span>
     </div>
     <div class="spacer"></div>
+    <button class="btn ghost icon" type="button" id="btnMore" aria-expanded="false" aria-label="Plus d'options" title="Lieu, nouveau plan, import / export"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
     <div class="tgroup">
       <button class="btn ghost icon" type="button" id="btnUndo" title="Annuler (Ctrl+Z)" aria-label="Annuler"><svg class="i" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button class="btn ghost icon" type="button" id="btnRedo" title="Rétablir (Ctrl+Maj+Z)" aria-label="Rétablir"><svg class="i" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
@@ -324,6 +370,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   </header>
 
   <aside class="panel left glass">
+    <div class="sheet-head"><span class="grab"></span><button class="btn ghost sheet-x" type="button" aria-label="Fermer">Fermer</button></div>
     <div class="tabs" role="tablist">
       <button class="tab" type="button" role="tab" id="tCat" aria-selected="true" aria-controls="pCat">Catalogue</button>
       <button class="tab" type="button" role="tab" id="tScene" aria-selected="false" aria-controls="pScene">Plan <span class="n" id="outCount">0</span></button>
@@ -383,6 +430,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   </nav>
 
   <aside class="panel right glass">
+    <div class="sheet-head"><span class="grab"></span><button class="btn ghost sheet-x" type="button" aria-label="Fermer">Fermer</button></div>
     <div class="tabs" role="tablist">
       <button class="tab" type="button" role="tab" id="tProps" aria-selected="true" aria-controls="pProps">Propriétés</button>
       <button class="tab" type="button" role="tab" id="tQuote" aria-selected="false" aria-controls="pQuote">Récap</button>
@@ -438,6 +486,22 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   </aside>
 
   <footer class="status glass" id="status"></footer>
+  <div class="msel glass" id="msel" hidden role="toolbar" aria-label="Élément sélectionné">
+    <span class="nm" id="mselName"></span>
+    <button class="btn" type="button" data-m="rl" aria-label="Pivoter à gauche">↺</button>
+    <button class="btn" type="button" data-m="rr" aria-label="Pivoter à droite">↻</button>
+    <button class="btn" type="button" data-m="props">Réglages</button>
+    <button class="btn" type="button" data-m="dup">Dupliquer</button>
+    <button class="btn" type="button" data-m="lock" id="mselLock">Verrouiller</button>
+    <button class="btn danger" type="button" data-m="del" id="mselDel">Supprimer</button>
+    <button class="btn" type="button" data-m="x" aria-label="Désélectionner">✕</button>
+  </div>
+  <nav class="mtabs" aria-label="Navigation">
+    <button type="button" data-side="left" data-tab="tCat" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Ajouter</button>
+    <button type="button" data-side="left" data-tab="tScene" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Plan<span class="dot" id="mCount"></span></button>
+    <button type="button" data-side="right" data-tab="tProps" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Réglages</button>
+    <button type="button" data-side="right" data-tab="tQuote" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Récap</button>
+  </nav>
 </div>
 
 <div class="modal" id="modal" hidden>
@@ -2991,6 +3055,7 @@ $('#catSearch').addEventListener('input', (e) => {
 $('#pCat').addEventListener('click', (e) => {
   const b = e.target.closest('.cat-item');
   if (!b) return;
+  if (MOBILE.matches) closeSheets();
   const it = CATALOG[b.dataset.c][1][b.dataset.i];
   const def = KINDS[it.kind];
   const snap = (v) => Math.round(v * 4) / 4;
@@ -3154,7 +3219,7 @@ function renderOutliner() {
     lock.title = o.userData.locked ? 'Déverrouiller' : 'Verrouiller';
     lock.setAttribute('aria-label', `${lock.title} ${o.name}`);
     lock.addEventListener('click', () => toggleLock(o));
-    li.querySelector('.pick').addEventListener('click', () => select(o));
+    li.querySelector('.pick').addEventListener('click', () => { select(o); if (MOBILE.matches) closeSheets(); });
     eye.addEventListener('click', () => {
       o.visible = !o.visible;
       if (!o.visible && o === selected) select(null, false);
@@ -3387,6 +3452,7 @@ $('#btnCopyQuote').addEventListener('click', () => {
 
 /* ---------- Refresh ---------- */
 function refresh() {
+  renderMobile();
   renderOutliner();
   fillInspector();
   renderQuote();
@@ -3394,6 +3460,72 @@ function refresh() {
   $('#btnRedo').disabled = hi >= hist.length - 1;
   updateSaveState();
 }
+
+/* ---------- Phones & tablets ---------- */
+const MOBILE = window.matchMedia('(max-width: 1100px), (pointer: coarse) and (max-width: 1400px)');
+const COARSE = window.matchMedia('(pointer: coarse)');
+let sheet = null;   // 'left:tCat' etc.
+function openSheet(side, tab) {
+  if (sheet === side + ':' + tab) return closeSheets();
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('open', p.classList.contains(side)));
+  showTab(side, tab);
+  sheet = side + ':' + tab;
+  document.body.classList.add('sheet-up');
+  syncTabs();
+}
+function closeSheets() {
+  document.querySelectorAll('.panel').forEach((p) => p.classList.remove('open'));
+  sheet = null;
+  document.body.classList.remove('sheet-up');
+  syncTabs();
+}
+function syncTabs() {
+  document.querySelectorAll('.mtabs button').forEach((b) => b.setAttribute('aria-pressed', String(sheet === b.dataset.side + ':' + b.dataset.tab)));
+}
+document.querySelectorAll('.mtabs button').forEach((b) => b.addEventListener('click', () => openSheet(b.dataset.side, b.dataset.tab)));
+document.querySelectorAll('.sheet-x').forEach((b) => b.addEventListener('click', closeSheets));
+// keep the sheet in step when its own tabs are used
+for (const [side, tabs] of Object.entries(TABS)) for (const id of Object.keys(tabs)) $('#' + id).addEventListener('click', () => { if (sheet?.startsWith(side)) { sheet = side + ':' + id; syncTabs(); } });
+// touching the 3D view puts the sheet away so the scene is fully visible again
+renderer.domElement.addEventListener('pointerdown', () => { if (MOBILE.matches && sheet) closeSheets(); });
+// "⋯" reveals the venue size, new plan and import / export on small screens
+[$('.room-in').closest('.tgroup'), $('#btnNew'), $('#btnExport'), $('label[for="fileImport"]')].forEach((el) => el.classList.add('m-more'));
+$('#btnMore').addEventListener('click', () => {
+  const open = $('.toolbar').classList.toggle('more-open');
+  $('#btnMore').setAttribute('aria-expanded', String(open));
+});
+$('#msel').addEventListener('click', (e) => {
+  const m = e.target.closest('[data-m]')?.dataset.m;
+  if (!m || !selected) return;
+  if (m === 'rl') $('#rotBar [data-rot="-15"]').click();
+  else if (m === 'rr') $('#rotBar [data-rot="15"]').click();
+  else if (m === 'props') openSheet('right', 'tProps');
+  else if (m === 'dup') $('#btnDup').click();
+  else if (m === 'lock') toggleLock(selected);
+  else if (m === 'del') del();
+  else if (m === 'x') select(null);
+});
+function renderMobile() {
+  $('#msel').hidden = !selected;
+  if (selected) {
+    $('#mselName').textContent = selected.name;
+    const lk = !!selected.userData.locked;
+    $('#mselLock').textContent = lk ? 'Déverrouiller' : 'Verrouiller';
+    $('#mselDel').disabled = lk;
+    document.querySelectorAll('#msel [data-m="rl"], #msel [data-m="rr"]').forEach((b) => (b.disabled = lk));
+  }
+  $('#mCount').textContent = objects.length || '';
+}
+function adaptInput() {
+  tc.setSize(COARSE.matches ? 1.6 : 1);
+  $('.vp-hint').textContent = COARSE.matches
+    ? '1 doigt : tourner · 2 doigts : zoomer et déplacer · Toucher : sélectionner · Double-toucher : élément verrouillé'
+    : 'Clic : sélectionner · Glisser : tourner · Clic droit : déplacer la vue · Molette : zoom · Q / D : pivoter · F : cadrer · V : voir sous les toiles · L : verrouiller';
+  if (!MOBILE.matches) closeSheets();
+}
+COARSE.addEventListener('change', adaptInput);
+MOBILE.addEventListener('change', adaptInput);
+adaptInput();
 
 let toastTimer = null;
 function toast(msg) {
