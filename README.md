@@ -14,3 +14,4 @@ Ouvrir `index.html` dans un navigateur récent (Chrome, Edge, Safari, Firefox). 
 
 - Guirlande guinguette en éventail : contour supprimé, seuls les rayons partent du mât central. La guirlande revient au mât le long des rayons (repassage compté dans le récap).
 - Éclairage adouci : ampoules, halo (bloom), faisceaux des projecteurs et soleil moins intenses, en vue jour comme en vue soirée.
+- Bouton « Lumières » (barre d'outils du bas) : deux réglages, Ampoules (brillance, 50 % par défaut) et Éclairage (lumière projetée sur le décor), gardés sur l'appareil.

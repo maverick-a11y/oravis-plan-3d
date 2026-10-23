@@ -331,6 +331,14 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   .vp-empty { padding-bottom: 140px; }
   .toast { top: calc(66px + env(safe-area-inset-top, 0px)); }
 }
+/* Lights settings popover (bulb glare + light cast), above the dock */
+.vp-look { position: absolute; z-index: 6; left: 50%; bottom: 150px; transform: translateX(-50%); width: 320px; padding: 12px 14px; display: grid; gap: 10px; }
+.vp-look .row { grid-template-columns: 78px minmax(0, 1fr) 46px; }
+.vp-look .note { font-size: 11px; }
+@media (max-width: 1100px), (pointer: coarse) and (max-width: 1400px) {
+  .vp-look { position: fixed; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); width: auto; transform: none; bottom: calc(132px + env(safe-area-inset-bottom, 0px)); z-index: 31; }
+  body.sheet-up .vp-look { display: none; }
+}
 @media (max-width: 480px) { .org { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -413,6 +421,12 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
     <button class="btn" type="button" data-rot="90" title="Pivoter de 90° à droite (Maj+D)">↻ 90°</button>
   </div>
 
+  <div class="vp-look glass" id="lookBar" hidden role="group" aria-label="Réglages des lumières">
+    <label class="row"><span>Ampoules</span><input id="lkBulbs" type="range" min="0" max="150" step="5" aria-label="Intensité des ampoules"><output id="vBulbs"></output></label>
+    <label class="row"><span>Éclairage</span><input id="lkLight" type="range" min="0" max="200" step="5" aria-label="Éclairage projeté par les lumières"><output id="vLight"></output></label>
+    <p class="note">Ampoules : brillance des ampoules (éblouissement). Éclairage : lumière projetée par les guirlandes, projecteurs et carrousels sur le décor. Réglage gardé sur cet appareil.</p>
+  </div>
+
   <nav class="dock glass" aria-label="Outils">
     <button class="btn" type="button" data-mode="translate" aria-pressed="true" title="Déplacer (W)"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="lbl">Déplacer</span><kbd>W</kbd></button>
     <button class="btn" type="button" data-mode="rotate" aria-pressed="false" title="Pivoter (E)"><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span class="lbl">Pivoter</span><kbd>E</kbd></button>
@@ -424,6 +438,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
       <button class="btn" type="button" id="btnTop" title="Vue de dessus (T)"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg><span class="lbl">Dessus</span><kbd>T</kbd></button>
       <button class="btn" type="button" id="btnSee" aria-pressed="false" title="Voir sous les toiles (V)"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">Sous toiles</span></button>
       <button class="btn" type="button" id="btnNight" aria-pressed="false" title="Vue de nuit pour voir les éclairages (N)"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="lbl">Soirée</span></button>
+      <button class="btn" type="button" id="btnLook" aria-pressed="false" aria-expanded="false" title="Réglage des ampoules et de l'éclairage"><svg class="i" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span class="lbl">Lumières</span></button>
     </div>
     <span class="vsep"></span>
     <button class="btn" type="button" id="btnPng" hidden title="Télécharger une image du plan"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><span class="lbl">Image</span></button>
@@ -2877,6 +2892,8 @@ function addObject(kind, o = {}) {
     } else L = new THREE.PointLight(color, I, 0, 2);
     g.add(L);
     g.userData.light = L;
+    g.userData.baseInt = I;
+    L.intensity = I * look.light;
   }
   keepAboveFloor(g);
   scene.add(g);
@@ -2909,7 +2926,7 @@ function keepAboveFloor(g) {
 
 function applyLamps(g) {
   const k = g.userData.lampScale;
-  for (const L of g.userData.lamps) L.intensity = L.userData.base * k;
+  for (const L of g.userData.lamps) L.intensity = L.userData.base * k * look.light;
 }
 
 let seeAll = false;
@@ -2944,7 +2961,7 @@ function describe(g) {
   if (Object.keys(g.userData.opts).length) d.opts = { ...g.userData.opts };
   if (!g.visible) d.visible = false;
   if (g.userData.locked) d.locked = true;
-  if (g.userData.light) d.intensity = g.userData.light.intensity;
+  if (g.userData.light) d.intensity = g.userData.baseInt;
   if (g.userData.lamps.length && g.userData.lampScale !== 1) d.ls = g.userData.lampScale;
   return d;
 }
@@ -3106,6 +3123,35 @@ function toggleNight() {
   applyTheme();
 }
 $('#btnNight').addEventListener('click', toggleNight);
+
+/* Lights settings, kept per device: bulbs = how bright the bulbs themselves look (glare; above ~100 % they start
+   to glow), light = how much light the garlands, projectors and carousels cast on the scene. */
+const LOOK_STORE = STORE + '.look';
+let look = { bulbs: 0.5, light: 1 };
+try {
+  const s = JSON.parse(localStorage.getItem(LOOK_STORE));
+  if (s) look = { bulbs: Number.isFinite(+s.bulbs) ? +s.bulbs : 0.5, light: Number.isFinite(+s.light) ? +s.light : 1 };
+} catch (e) {}
+const BULB_BASE = [[MAT.bulb, '#ffe0a3', 1.7], [MAT.globe, '#ffd38a', 1.9]];
+function applyLook() {
+  for (const [m, c, k] of BULB_BASE) m.color.set(c).multiplyScalar(k * look.bulbs);
+  for (const o of objects) {
+    applyLamps(o);
+    if (o.userData.light) o.userData.light.intensity = o.userData.baseInt * look.light;
+  }
+  setVal('#lkBulbs', Math.round(look.bulbs * 100)); $('#vBulbs').textContent = Math.round(look.bulbs * 100) + ' %';
+  setVal('#lkLight', Math.round(look.light * 100)); $('#vLight').textContent = Math.round(look.light * 100) + ' %';
+  try { localStorage.setItem(LOOK_STORE, JSON.stringify(look)); } catch (e) {}
+}
+$('#lkBulbs').addEventListener('input', (e) => { look.bulbs = +e.target.value / 100; applyLook(); });
+$('#lkLight').addEventListener('input', (e) => { look.light = +e.target.value / 100; applyLook(); });
+function toggleLookBar(open = $('#lookBar').hidden) {
+  $('#lookBar').hidden = !open;
+  $('#btnLook').setAttribute('aria-pressed', String(open));
+  $('#btnLook').setAttribute('aria-expanded', String(open));
+}
+$('#btnLook').addEventListener('click', () => toggleLookBar());
+applyLook();
 
 function toggleSee() {
   seeAll = !seeAll;
@@ -3336,7 +3382,7 @@ function fillInspector() {
   $('#lightRow').hidden = !g.userData.light;
   $('#lampRow').hidden = !g.userData.lamps.length;
   if (g.userData.lamps.length) { setVal('#fLamp', Math.round(g.userData.lampScale * 100)); $('#vLamp').textContent = Math.round(g.userData.lampScale * 100) + ' %'; }
-  if (g.userData.light) { setVal('#fInt', g.userData.light.intensity); $('#vInt').textContent = fmt(g.userData.light.intensity, 0); }
+  if (g.userData.light) { setVal('#fInt', g.userData.baseInt); $('#vInt').textContent = fmt(g.userData.baseInt, 0); }
   const lk = !!g.userData.locked;
   $('#lockNote').hidden = !lk;
   $('#btnLock').innerHTML = lk ? 'Déverrouiller <kbd>L</kbd>' : 'Verrouiller <kbd>L</kbd>';
@@ -3366,7 +3412,7 @@ $('#fName').addEventListener('input', (e) => {
 $('#fName').addEventListener('blur', () => fillInspector());
 $('#fColor').addEventListener('input', (e) => { if (selected) { setColor(e.target.value); renderOutliner(); } });
 $('#fLamp').addEventListener('input', (e) => { if (selected?.userData.lamps.length) { selected.userData.lampScale = +e.target.value / 100; applyLamps(selected); fillInspector(); } });
-$('#fInt').addEventListener('input', (e) => { if (selected?.userData.light) { selected.userData.light.intensity = +e.target.value; fillInspector(); } });
+$('#fInt').addEventListener('input', (e) => { if (selected?.userData.light) { selected.userData.baseInt = +e.target.value; selected.userData.light.intensity = selected.userData.baseInt * look.light; fillInspector(); } });
 
 function duplicate() {
   if (!selected) return;
@@ -3571,7 +3617,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'l') toggleLock(selected);
   else if (k === 'f') focusSel();
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); del(); }
-  else if (k === 'escape') { if (!$('#modal').hidden) $('#modal').hidden = true; else select(null); }
+  else if (k === 'escape') { if (!$('#modal').hidden) $('#modal').hidden = true; else if (!$('#lookBar').hidden) toggleLookBar(false); else select(null); }
 });
 
 /* ---------- Team library and downloads ---------- */
