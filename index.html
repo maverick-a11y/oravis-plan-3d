@@ -795,7 +795,7 @@ function addFeed(g, [x, z], hook) {
   g.add(new THREE.Mesh(mergeLocal([new THREE.BoxGeometry(0.22, 0.3, 0.12).translate(x + 0.2, 0.15, z), stick([x + 0.06, 0.3, z], [x + 0.06, hook - 0.05, z], 0.006, 0.006, 5)]), MAT.black));
 }
 const BULB = shared(new THREE.SphereGeometry(0.05, 8, 6));
-MAT.bulb = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe0a3').multiplyScalar(3.2) }));
+MAT.bulb = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe0a3').multiplyScalar(1.7) }));
 MAT.wire = fixed(new THREE.LineBasicMaterial({ color: '#d8d2bf', transparent: true, opacity: 0.7 }));   // clear cable, like real fairy lights
 /* Guinguette run on free-standing 3 m poles, garland hooked at 2,95 m.
    zigzag = two rows of poles, the garland crossing diagonally from one row to the other;
@@ -956,7 +956,7 @@ const fairyTotals = (o) => {
 };
 const GLOBE = shared(new THREE.SphereGeometry(0.028, 12, 9));
 const SOCKET = shared(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 8));
-MAT.globe = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd38a').multiplyScalar(3.6) }));
+MAT.globe = fixed(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd38a').multiplyScalar(1.9) }));
 function addStringLights(g, { strands, cables }, masts, style = 'fine') {
   const wire = [], bulbs = [], gg = style === 'guinguette';
   for (const { a, b, d, len } of strands) {
@@ -1338,7 +1338,7 @@ function djBooth(g, prim, o) {
     box(g, 0.04, H - 0.05, Dp, face, -W / 2 + 0.02, (H - 0.05) / 2, 0);
     box(g, 0.04, H - 0.05, Dp, face, W / 2 - 0.02, (H - 0.05) / 2, 0);
     box(g, W + 0.06, 0.05, Dp + 0.06, MAT.black, 0, H - 0.025, 0);
-    const led = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.led).multiplyScalar(2.6) });
+    const led = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.led).multiplyScalar(1.6) });
     const strip = box(g, W - 0.1, 0.025, 0.01, led, 0, 0.06, Dp / 2 + 0.006); strip.userData.noShadow = true;
     const strip2 = box(g, W - 0.1, 0.025, 0.01, led, 0, H - 0.1, Dp / 2 + 0.006); strip2.userData.noShadow = true;
   }
@@ -2010,7 +2010,7 @@ function animateCarousels(t) {
 
 // Glowing lens (HDR so it blooms) and a soft additive light cone that fades with distance and toward its edges.
 const BEAM = { strength: { value: 0.08 } };
-function lensMat(c) { return new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(4) }); }
+function lensMat(c) { return new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(2.2) }); }
 function beamMat(c) {
   return new THREE.ShaderMaterial({
     uniforms: { uColor: { value: c.clone() }, uStrength: BEAM.strength },
@@ -2663,7 +2663,7 @@ const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enableDamping = true;
 orbit.maxPolarAngle = PI / 2 - 0.02;
 
-const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
 sun.position.set(8, 16, 6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -2678,17 +2678,18 @@ const envTex = scene.environment;
 
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.35, 2.2);
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.2, 0.3, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 function setLook() {
   // Day: crisp sun with a light glow on bulbs. Night: moonlit blue fill, bright bloom, visible beams.
-  Object.assign(bloom, night ? { strength: 0.9, radius: 0.55, threshold: 1.1 } : { strength: 0.45, radius: 0.35, threshold: 2.2 });
-  BEAM.strength.value = night ? 0.45 : 0.08;
-  renderer.toneMappingExposure = night ? 1.15 : 1.0;
+  Object.assign(bloom, night ? { strength: 0.45, radius: 0.4, threshold: 1.25 } : { strength: 0.2, radius: 0.3, threshold: 1.6 });
+  BEAM.strength.value = night ? 0.25 : 0.06;
+  renderer.toneMappingExposure = night ? 1.0 : 0.95;
   sun.color.set(night ? '#7f98d6' : '#fff3e2');
   hemi.color.set(night ? '#30406e' : '#ffffff');
 }
+setLook();
 
 const catcher = new THREE.Mesh(new THREE.PlaneGeometry(200, 200).rotateX(-PI / 2), new THREE.ShadowMaterial({ opacity: 0.2 }));
 catcher.receiveShadow = true;
@@ -3098,7 +3099,7 @@ $('#btnRedo').addEventListener('click', redo);
 function toggleNight() {
   night = !night;
   $('#btnNight').setAttribute('aria-pressed', String(night));
-  sun.intensity = night ? 0.12 : 1.6;
+  sun.intensity = night ? 0.12 : 1.25;
   hemi.intensity = night ? 0.07 : 0.35;
   setLook();
   scene.environment = night ? null : envTex;
@@ -3257,7 +3258,7 @@ $('#swatches').addEventListener('click', (e) => {
 function setColor(c) {
   selected.userData.prim.color.set(c);
   selected.userData.light?.color.set(c);
-  selected.getObjectByName('lens')?.material.color.set(c).multiplyScalar(4);
+  selected.getObjectByName('lens')?.material.color.set(c).multiplyScalar(2.2);
   selected.getObjectByName('beam')?.material.uniforms.uColor.value.set(c);
 }
 

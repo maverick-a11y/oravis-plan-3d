@@ -13,3 +13,4 @@ Ouvrir `index.html` dans un navigateur récent (Chrome, Edge, Safari, Firefox). 
 ## Dernières modifications
 
 - Guirlande guinguette en éventail : contour supprimé, seuls les rayons partent du mât central. La guirlande revient au mât le long des rayons (repassage compté dans le récap).
+- Éclairage adouci : ampoules, halo (bloom), faisceaux des projecteurs et soleil moins intenses, en vue jour comme en vue soirée.
