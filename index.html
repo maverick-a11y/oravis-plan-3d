@@ -806,7 +806,7 @@ MAT.wire = fixed(new THREE.LineBasicMaterial({ color: '#d8d2bf', transparent: tr
    Sag 6 % of the span + 15 cm; length = parabola arc; 3 bulbs per metre. */
 const MAX_SPAN = 5, MAX_SPAN_STAKED = 10, HOOK = 2.95, HOOK_MAST = 3.9;   // safety: max garland span between two poles
 const GUING_LAYOUTS = {
-  zigzag: 'Zigzag sur toute la zone', lignes: 'Lignes dans la longueur', travers: 'Lignes en travers', quadrillage: 'Quadrillage (2 sens)',
+  'zigzag-simple': 'Zigzag simple (1 poteau de chaque côté, en quinconce)', zigzag: 'Zigzag sur toute la zone', lignes: 'Lignes dans la longueur', travers: 'Lignes en travers', quadrillage: 'Quadrillage (2 sens)',
   croix: 'Croisillons (X dans chaque case)', losanges: 'Losanges + contour', echelle: 'Échelle (allée)', 'tour-lignes': 'Contour + lignes',
   'tour-x': 'Contour + grande croix', etoile: 'Étoile depuis un mât central', eventail: 'Éventail depuis un côté (scène)',
   carrousel: 'Carrousel (cercle + rayons)', perimetre: 'Contour seul', ligne: 'Ligne droite',
@@ -828,6 +828,14 @@ function guinguetteRun(o) {
   let radial = 0;
   if (lay === 'ligne') { xs.forEach((x) => pts.push(P(x, 0))); rows([0]); }
   else if (lay === 'perimetre') { const r = ring(); pts.push(...r); loop(r); }
+  else if (lay === 'zigzag-simple') {
+    // One row of poles on each side, staggered: the garland zigzags from one side to the other. Poles are brought
+    // closer along the sides so that each diagonal stays within the safety span when the width allows it.
+    const step = W < maxSpan ? Math.min(sp, Math.sqrt(maxSpan ** 2 - W ** 2)) : sp;
+    const k = Math.max(1, Math.ceil(L / step - 1e-9)), zz = Array.from({ length: k + 1 }, (_, i) => P(-L / 2 + (i * L) / k, i % 2 ? W / 2 : -W / 2));
+    pts.push(...zz);
+    for (let i = 0; i < k; i++) raw.push([zz[i], zz[i + 1]]);
+  }
   else if (lay === 'zigzag') { grid(); for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) { const side = (k) => ((k + j) % 2 ? zs[j + 1] : zs[j]); raw.push([P(xs[i], side(i)), P(xs[i + 1], side(i + 1))]); } }
   else if (lay === 'lignes') { grid(); rows(); }
   else if (lay === 'travers') { grid(); cols(); }
@@ -838,7 +846,7 @@ function guinguetteRun(o) {
   else if (lay === 'tour-lignes') { grid(); loop(ring()); rows(zs.slice(1, -1)); }
   else if (lay === 'tour-x') { const r = ring(); pts.push(...r); loop(r); raw.push([P(-L / 2, -W / 2), P(L / 2, W / 2)], [P(L / 2, -W / 2), P(-L / 2, W / 2)]); }
   else if (lay === 'etoile') { const r = ring(), c = P(0, 0, HOOK_MAST); pts.push(...r, c); loop(r); r.forEach((p) => raw.push([c, p])); }
-  else if (lay === 'eventail') { const r = ring(), c = P(-L / 2, 0, HOOK_MAST); pts.push(...r, c); loop(r); r.filter((p) => p[0] > -L / 2 + 1e-6).forEach((p) => raw.push([c, p])); }
+  else if (lay === 'eventail') { const r = ring(), c = P(-L / 2, 0, HOOK_MAST); pts.push(...r, c); r.filter((p) => p[0] > -L / 2 + 1e-6).forEach((p) => raw.push([c, p])); }
   else if (lay === 'carrousel') {
     const R = Math.min(L, W) / 2, k = Math.max(6, Math.ceil((2 * PI * R) / sp - 1e-9)), c = P(0, 0, HOOK_MAST);
     const r = Array.from({ length: k }, (_, i) => P(R * Math.cos((2 * PI * i) / k), R * Math.sin((2 * PI * i) / k)));
@@ -885,7 +893,8 @@ function poleLinks(poles, maxSpan) {
   }
   return out;
 }
-const guinguetteRoute = (o, r) => continuousRoute(toEdges(r.strands), poleLinks(r.poles, o.stake ? MAX_SPAN_STAKED : MAX_SPAN));
+// Fan: no contour, so the route never hops between the outer poles; it doubles back along the rays instead.
+const guinguetteRoute = (o, r) => continuousRoute(toEdges(r.strands), o.layout === 'eventail' ? [] : poleLinks(r.poles, o.stake ? MAX_SPAN_STAKED : MAX_SPAN));
 const guinguetteTotals = (o) => {
   const r = guinguetteRun(o), m = r.strands.reduce((t, x) => t + x.len, 0), route = guinguetteRoute(o, r), buy = Math.ceil(route.total * 1.1);
   return { route, poles: r.poles.length - r.masts, masts: r.masts, extra: r.extra, stakes: r.guys.length, m, buy, bulbs: buy * 3, capped: o.spacing > (o.stake ? MAX_SPAN_STAKED : MAX_SPAN) };
@@ -2580,6 +2589,7 @@ const CATALOG = [
     { kind: 'arch', label: 'Arche octogonale fleurie', sub: 'avec pampa et fleurs (non incluses)', opts: { flowers: true } },
   ]],
   ['Son et lumière', [
+    { kind: 'guinguette', label: 'Guinguette zigzag simple', sub: '12 × 4 m · 1 poteau de chaque côté en quinconce', opts: { layout: 'zigzag-simple', length: 12, width: 4, spacing: 4 } },
     { kind: 'guinguette', label: 'Guinguette sur poteaux (zigzag)', sub: '12 × 6 m · toute la zone · 3 ampoules/m' },
     { kind: 'guinguette', label: 'Guinguette quadrillage 20 × 15 m', sub: 'ciel de lumière sur toute la zone', opts: { layout: 'quadrillage', length: 20, width: 15, spacing: 5 } },
     { kind: 'guinguette', label: 'Guinguette étoile 15 × 15 m', sub: 'mât central 4 m + contour', opts: { layout: 'etoile', length: 15, width: 15, spacing: 5 } },
@@ -3761,5 +3771,6 @@ view(false);
 commit();
 refresh();
 </script>
+
 
 </body></html>
