@@ -18,3 +18,4 @@ Ouvrir `index.html` dans un navigateur récent (Chrome, Edge, Safari, Firefox). 
 - Tente stretch : option « Guirlande scintillante entre 2 mâts » (travée gauche ou droite sur la 10,5 × 21 m). Chaque brin part du sol d'un côté, monte tout droit jusqu'au bord de la toile, passe sous la toile et par-dessus le filin entre les mâts, puis finit sur le bord de toile opposé. Ampoules qui scintillent, métrage et brins comptés dans le récap.
 - Catalogue (Structures) : bar bois blanc plateau zinc, L 180 × P 50 × h 110 cm, bois recyclé (façade à 2 panneaux rainurés, consoles sculptées, corniche, plateau zinc).
 - Catalogue (Son et lumière) : boules à facettes Ø 20, 30, 40 et 50 cm, suspendues (chaîne + moteur), hauteur réglable, rotation, taches lumineuses au sol en vue Soirée.
+- Curseur de zoom vertical à droite de la vue 3D (+ / −), qui suit aussi le zoom à la molette ou aux doigts.

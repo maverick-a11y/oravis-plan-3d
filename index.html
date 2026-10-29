@@ -339,6 +339,19 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   .vp-look { position: fixed; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); width: auto; transform: none; bottom: calc(132px + env(safe-area-inset-bottom, 0px)); z-index: 31; }
   body.sheet-up .vp-look { display: none; }
 }
+/* Quick zoom slider, vertical, on the right edge of the 3D view (zoom in at the top) */
+.vp-zoom { position: absolute; z-index: 5; right: 364px; top: 50%; transform: translateY(-50%); display: grid; justify-items: center; gap: 4px; padding: 6px 4px; border-radius: 14px; }
+.vp-zoom .btn { background: transparent; padding: 6px; font: 600 15px/1 var(--font-mono); width: 32px; justify-content: center; }
+.vp-zoom .btn:hover { background: var(--field); }
+.vp-zoom .track { width: 32px; height: 190px; position: relative; }
+.vp-zoom input[type="range"] { position: absolute; left: 50%; top: 50%; width: 190px; margin: 0; transform: translate(-50%, -50%) rotate(-90deg); accent-color: var(--accent); cursor: pointer; }
+@media (max-width: 1280px) { .vp-zoom { right: 324px; } }
+@media (max-width: 1100px), (pointer: coarse) and (max-width: 1400px) {
+  .vp-zoom { position: fixed; right: max(8px, env(safe-area-inset-right, 0px)); top: 42%; z-index: 30; }
+  .vp-zoom .track { height: 150px; }
+  .vp-zoom input[type="range"] { width: 150px; }
+  body.sheet-up .vp-zoom { display: none; }
+}
 @media (max-width: 480px) { .org { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -419,6 +432,12 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
     <output id="rotVal">0°</output>
     <button class="btn" type="button" data-rot="15" title="Pivoter de 15° à droite (D)">↻ 15°</button>
     <button class="btn" type="button" data-rot="90" title="Pivoter de 90° à droite (Maj+D)">↻ 90°</button>
+  </div>
+
+  <div class="vp-zoom glass" id="zoomBar" role="group" aria-label="Zoom">
+    <button class="btn" type="button" id="zIn" title="Zoomer" aria-label="Zoomer">+</button>
+    <div class="track"><input id="zoomR" type="range" min="0" max="100" step="0.5" aria-label="Zoom de la vue" title="Glisser pour zoomer"></div>
+    <button class="btn" type="button" id="zOut" title="Dézoomer" aria-label="Dézoomer">−</button>
   </div>
 
   <div class="vp-look glass" id="lookBar" hidden role="group" aria-label="Réglages des lumières">
@@ -2941,8 +2960,25 @@ new ResizeObserver(resize).observe(vpEl);
 resize();
 
 const danceClock = new THREE.Clock();
+/* Quick zoom: the slider sets the camera's distance to the point it looks at, on a log scale (1,5 m → 160 m),
+   and follows the mouse wheel / pinch zoom. */
+const ZMIN = 1.5, ZMAX = 160;
+const zToD = (v) => ZMIN * Math.pow(ZMAX / ZMIN, 1 - v / 100);
+const dToZ = (d) => 100 * (1 - Math.log(Math.min(ZMAX, Math.max(ZMIN, d)) / ZMIN) / Math.log(ZMAX / ZMIN));
+function setZoom(v) {
+  v = Math.min(100, Math.max(0, v));
+  const off = camera.position.clone().sub(orbit.target);
+  if (off.lengthSq() < 1e-8) off.set(0, 1, 0.01);
+  camera.position.copy(orbit.target).add(off.setLength(zToD(v)));
+}
+const zoomR = $('#zoomR');
+zoomR.addEventListener('input', () => setZoom(+zoomR.value));
+$('#zIn').addEventListener('click', () => setZoom(dToZ(camera.position.distanceTo(orbit.target)) + 10));
+$('#zOut').addEventListener('click', () => setZoom(dToZ(camera.position.distanceTo(orbit.target)) - 10));
+
 renderer.setAnimationLoop(() => {
   orbit.update();
+  if (document.activeElement !== zoomR) zoomR.value = dToZ(camera.position.distanceTo(orbit.target));
   const tNow = danceClock.getElapsedTime();
   animateDancers(tNow);
   animateCarousels(tNow);
