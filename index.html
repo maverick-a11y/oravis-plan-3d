@@ -702,6 +702,72 @@ const STRETCH = {
 // Closed corners (fabric down to the ground) carry no strand on their last bay, or it would cross the cloth.
 const STRETCH_CLOSED = { ouverts: [], fermes: [[-1, -1], [1, -1], [1, 1], [-1, 1]], 'un-cote': [[-1, -1], [-1, 1]] };
 const closedOf = (o) => STRETCH_CLOSED[o.corners] || [];
+/* Twinkling garland under the fabric, in one bay between two centre masts (left or right bay of the row).
+   Each strand starts on the ground at one long side, climbs to the carrier cable between the two masts, goes over it
+   and comes down to the fabric hem on the opposite side (following the scallops). Fine micro-LEDs every 10 cm. */
+const mastRow = (T) => T.peaks.filter(([, z]) => Math.abs(z) < 1e-6).map(([x]) => x).sort((a, b) => a - b);
+const twinkleOk = (o) => mastRow(STRETCH[o.size] || STRETCH['15x10.5']).length >= 2;
+function twinkleRun(T, o) {
+  const row = mastRow(T);
+  if (row.length < 2) return null;
+  const [xa, xb] = o.twBay === 'droite' ? row.slice(-2) : row.slice(0, 2);
+  const { L, W, sx, H, peak } = T, yc = Math.min(peak - 0.6, H + 0.05), y0 = H - 0.15, sag = 0.75, pull = 0.55;
+  const s = o.twSide === 'arriere' ? -1 : 1, step = (o.twStep || 30) / 100, m = 0.35, zg = s * (W / 2 - 0.15);
+  const n = Math.max(1, Math.round((xb - xa - 2 * m) / step)), strands = [];
+  const d3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  for (let i = 0; i <= n; i++) {
+    const x = xa + m + (i * (xb - xa - 2 * m)) / n, w = Math.sin(PI * (((x + L / 2) / sx) % 1));
+    const A = [x, 0.05, zg], C = [x, yc + 0.015, 0], B = [x, y0 - sag * w, -s * (W / 2 - pull * w)];
+    for (const [p, q, d] of [[A, C, (k) => 0.02 * k], [C, B, (k) => 0.05 * k + 0.1]]) {
+      const span = d3(p, q), dd = d(span);
+      strands.push({ a: p, b: q, d: dd, len: span + (8 * dd * dd) / (3 * span) });
+    }
+  }
+  const len = strands.reduce((t, x) => t + x.len, 0);
+  return { strands, n: n + 1, len, buy: Math.ceil(len * 1.1), cable: [[xa, yc, 0], [xb, yc, 0]], rail: [[xa + m, 0.03, zg], [xb - m, 0.03, zg]], bay: xb - xa };
+}
+const TWINKLE_BULB = shared(new THREE.SphereGeometry(0.02, 6, 4));
+const _tc = new THREE.Color();
+function addTwinkle(g, tw) {
+  const wire = [], bulbs = [];
+  for (const { a, b, d, len } of tw.strands) {
+    const n = Math.max(2, Math.round(len / 0.1));
+    let prev = null;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - 4 * d * t * (1 - t), a[2] + (b[2] - a[2]) * t];
+      if (prev) wire.push(...prev, ...p);
+      bulbs.push(p); prev = p;
+    }
+  }
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+  g.add(new THREE.LineSegments(wg, MAT.wire));
+  // carrier cable between the two masts, and the ground line holding the strand feet
+  g.add(new THREE.Mesh(mergeLocal([stick(...tw.cable, 0.005, 0.005, 5), stick(...tw.rail, 0.01, 0.01, 6)]), MAT.rope));
+  const inst = new THREE.InstancedMesh(TWINKLE_BULB, new THREE.MeshBasicMaterial({ color: '#ffffff' }), bulbs.length);
+  const m4 = new THREE.Matrix4(), rnd = seeded(bulbs.length * 7 + 1), ph = new Float32Array(bulbs.length * 2);
+  bulbs.forEach((p, i) => { inst.setMatrixAt(i, m4.makeTranslation(p[0], p[1], p[2])); inst.setColorAt(i, MAT.bulb.color); ph[2 * i] = rnd() * PI * 2; ph[2 * i + 1] = 1.2 + rnd() * 3.8; });
+  inst.name = 'twinkle'; inst.userData.noShadow = true; inst.userData.ph = ph;
+  g.add(inst);
+  const L = new THREE.PointLight('#ffe2a8', 5, 0, 2); L.position.set((tw.cable[0][0] + tw.cable[1][0]) / 2, 2.4, 0); g.add(L);
+}
+function stretchLightsInfo(o) {
+  if (!o.lights || o.lights === 'aucune') return '';
+  const gg = o.lights === 'guinguette', t = lightTotals(STRETCH[o.size] || STRETCH['15x10.5'], gg ? 'guinguette' : 'fine', closedOf(o));
+  if (gg) return `1 départ, guirlande continue : ${Math.round(t.route.total)} m (${Math.round(t.m)} m de brins + ${Math.round(t.route.extra)} m de repassage) · +10 % de marge = ${t.buy} m · ${t.bulbs} ampoules` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
+  return `${t.n} brins · ${Math.round(t.m)} m de guirlande (+10 % de marge = ${t.buy} m)` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
+}
+// Each bulb fades in and out at its own pace; brightness follows the "Ampoules" setting.
+function animateTwinkle(t) {
+  for (const o of objects) {
+    if (!o.visible || o.userData.kind !== 'stretch') continue;
+    const inst = o.getObjectByName('twinkle');
+    if (!inst) continue;
+    const ph = inst.userData.ph;
+    for (let i = 0; i < inst.count; i++) { const v = 0.5 + 0.5 * Math.sin(t * ph[2 * i + 1] + ph[2 * i]); inst.setColorAt(i, _tc.copy(MAT.bulb.color).multiplyScalar(0.2 + 1.1 * v * v * v)); }
+    inst.instanceColor.needsUpdate = true;
+  }
+}
 function stretchStrands(T, mode = 'fine', closed = []) {
   const { L, W, sx, sz, H, peak, peaks } = T, step = 0.7, sag = 0.75, pull = 0.55, y0 = H - 0.15, ym = Math.min(peak - 0.6, H + 0.05);   // cable just under the fabric between masts
   const edges = [                                   // [start, direction, length, pole spacing, inward normal]
@@ -2296,13 +2362,17 @@ const KINDS = {
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
       guys: { label: 'Haubans', type: 'bool', def: true },
       lights: { label: 'Guirlandes lumineuses', type: 'select', values: ['aucune', 'normale', 'guinguette', 'dense'], names: { aucune: 'Aucune', normale: 'Fine, étoile 1 brin tous les 70 cm', guinguette: 'Guinguette, 1 brin par poteau (3 ampoules/m)', dense: 'Fine, étoile 1 brin tous les 70 cm' }, def: 'aucune' },
+      twinkle: { when: twinkleOk, label: 'Guirlande scintillante entre 2 mâts', type: 'bool', def: false },
+      twBay: { when: (o) => o.twinkle && twinkleOk(o) && mastRow(STRETCH[o.size]).length > 2, label: 'Travée', type: 'select', values: ['gauche', 'droite'], names: { gauche: 'Entre les mâts de gauche', droite: 'Entre les mâts de droite' }, def: 'gauche' },
+      twSide: { when: (o) => o.twinkle && twinkleOk(o), label: 'Départ au sol', type: 'select', values: ['avant', 'arriere'], names: { avant: 'Côté avant (accroche toile à l\'arrière)', arriere: 'Côté arrière (accroche toile à l\'avant)' }, def: 'avant' },
+      twStep: { when: (o) => o.twinkle && twinkleOk(o), label: 'Écart entre brins', type: 'select', values: [20, 30, 50], suffix: ' cm', def: 30 },
       seeThrough: SEE,
     },
     info(o) {
-      if (!o.lights || o.lights === 'aucune') return '';
-      const gg = o.lights === 'guinguette', t = lightTotals(STRETCH[o.size] || STRETCH['15x10.5'], gg ? 'guinguette' : 'fine', closedOf(o));
-      if (gg) return `1 départ, guirlande continue : ${Math.round(t.route.total)} m (${Math.round(t.m)} m de brins + ${Math.round(t.route.extra)} m de repassage) · +10 % de marge = ${t.buy} m · ${t.bulbs} ampoules` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
-      return `${t.n} brins · ${Math.round(t.m)} m de guirlande (+10 % de marge = ${t.buy} m)` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
+      const T0 = STRETCH[o.size] || STRETCH['15x10.5'], tw = o.twinkle ? twinkleRun(T0, o) : null;
+      const twTxt = tw ? `Guirlande scintillante : ${tw.n} brins tous les ${o.twStep || 30} cm (sol → filin → bord de toile) · ${Math.round(tw.len)} m (+10 % de marge = ${tw.buy} m)` + (!o.lights || o.lights === 'aucune' ? ` · filin entre mâts ${fmtM(tw.bay)} m` : '') : '';
+      const base = stretchLightsInfo(o);
+      return [base, twTxt].filter(Boolean).join(' · ');
     },
     build(g, prim, o) {
       const T = STRETCH[o.size] || STRETCH['15x10.5'];
@@ -2325,12 +2395,15 @@ const KINDS = {
       g.add(new THREE.Mesh(mergeLocal(wood), MAT.bamboo));
       if (ropes.length) g.add(new THREE.Mesh(mergeLocal(ropes), MAT.rope));
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
+      if (o.twinkle) { const tw = twinkleRun(T, o); if (tw) addTwinkle(g, tw); }
     },
     quote: (o) => {
       const q = { ['tente_stretch_' + (STRETCH[o.size] ? o.size : '15x10.5')]: 1 };
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette', t = lightTotals(STRETCH[o.size] || STRETCH['15x10.5'], gg ? 'guinguette' : 'fine', closedOf(o));
         if (gg) { q.guinguette_m = t.buy; q.ampoules_guinguette = t.bulbs; q.depart_guinguette = 1; } else { q.guirlande_m = t.buy; q.guirlande_brins = t.n; }
         if (t.cable) q.cable_porteur_m = Math.ceil(t.cable); }
+      const tw = o.twinkle ? twinkleRun(STRETCH[o.size] || STRETCH['15x10.5'], o) : null;
+      if (tw) { q.scintillant_m = tw.buy; q.scintillant_brins = tw.n; if (!q.cable_porteur_m) q.cable_porteur_m = Math.ceil(tw.bay); }
       return q;
     },
   },
@@ -2572,6 +2645,7 @@ const CATALOG = [
     { kind: 'stretch', label: 'Stretch 10,5 × 15 m + guirlandes', sub: 'éclairage guinguette en étoile', opts: { lights: 'normale' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 15 m fermée', sub: 'angles fermés, toile tirée au sol', opts: { corners: 'fermes' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m', sub: '3 mâts · implantation 27 × 16,5 m', opts: { size: '21x10.5' } },
+    { kind: 'stretch', label: 'Stretch 10,5 × 21 m + scintillant', sub: '220 m² · guirlande scintillante entre 2 mâts', opts: { size: '21x10.5', twinkle: true } },
     { kind: 'stretch', label: 'Stretch 21 × 15 m', sub: '6 mâts · implantation 27 × 21 m', opts: { size: '21x15' } },
     { kind: 'shade', label: 'Voile d\'ombrage 4 × 5 m', sub: '4 poteaux bambou · implantation 10 × 11 m' },
     { kind: 'shade', label: '4 voiles d\'ombrage accrochées', sub: 'bloc 8 × 10 m · poteaux partagés', opts: { count: 4 } },
@@ -2637,7 +2711,7 @@ const ITEM_DEFS = [
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
-  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
+  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
@@ -2770,6 +2844,7 @@ renderer.setAnimationLoop(() => {
   const tNow = danceClock.getElapsedTime();
   animateDancers(tNow);
   animateCarousels(tNow);
+  animateTwinkle(tNow);
   if (selected && keepAboveFloor(selected)) fillInspector();
   if (selected) selBox.box.setFromObject(selected);
   composer.render();
