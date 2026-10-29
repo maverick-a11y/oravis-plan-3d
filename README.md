@@ -19,3 +19,4 @@ Ouvrir `index.html` dans un navigateur récent (Chrome, Edge, Safari, Firefox). 
 - Catalogue (Structures) : bar bois blanc plateau zinc, L 180 × P 50 × h 110 cm, bois recyclé (façade à 2 panneaux rainurés, consoles sculptées, corniche, plateau zinc).
 - Catalogue (Son et lumière) : boules à facettes Ø 20, 30, 40 et 50 cm, suspendues (chaîne + moteur) ou posées au sol, hauteur réglable de 0,50 m à 5 m, rotation, taches lumineuses au sol en vue Soirée.
 - Curseur de zoom vertical à droite de la vue 3D (+ / −), qui suit aussi le zoom à la molette ou aux doigts.
+- Catalogue : mange-debout fer forgé (plateau Ø 50 cm, h 110 cm, pieds galbés), avec 0 à 4 tabourets autour ; tabourets bistrot (assise tressée, piètement façon rotin) et industriels (fer et bois). Tabourets comptés dans les places assises.

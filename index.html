@@ -1609,7 +1609,7 @@ function chair(g, mat, x = 0, z = 0, ry = 0, model = 'bistrot', cushion = false)
 }
 const chairMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 });
 const chairKey = (m) => (m === 'pliante' ? 'chaise' : 'chaise_' + (m || 'bistrot'));
-const seatsOf = (q) => Object.entries(q).reduce((s, [k, v]) => s + (k.startsWith('chaise') ? v : 0), 0) + 2 * (q.canape || 0) + 5 * (q.salon_bambou || 0) + 3 * (q.canape_bambou || 0) + (q.fauteuil_bambou || 0) + 4 * (q.salon_teck || 0) + 2 * (q.canape_teck || 0) + (q.fauteuil_teck || 0);
+const seatsOf = (q) => Object.entries(q).reduce((s, [k, v]) => s + (k.startsWith('chaise') || k.startsWith('tabouret') ? v : 0), 0) + 2 * (q.canape || 0) + 5 * (q.salon_bambou || 0) + 3 * (q.canape_bambou || 0) + (q.fauteuil_bambou || 0) + 4 * (q.salon_teck || 0) + 2 * (q.canape_teck || 0) + (q.fauteuil_teck || 0);
 
 /* ---------- Catalogue (dimensions in metres) ---------- */
 const SEE = { label: 'Toile transparente', type: 'bool', def: false };
@@ -2204,6 +2204,79 @@ function zincBar(g, prim) {
   g.add(new THREE.Mesh(mergeLocal([0.74, -0.74].flatMap((x) => [corbel(x, D / 2 + f, 1), corbel(x, -D / 2 - f, -1)])), prim));
 }
 
+/* Wrought iron standing table: round patinated top Ø 50 cm at 1,10 m, four curved legs drawn in to a waist with a
+   collar, then splayed out to the ground (tulip shape). Optional stools set around it. */
+MAT.iron = fixed(new THREE.MeshStandardMaterial({ color: '#4a2f24', metalness: 0.55, roughness: 0.55 }));
+MAT.rattanTube = fixed(new THREE.MeshStandardMaterial({ color: '#d4a55a', roughness: 0.5 }));
+MAT.wrap = fixed(new THREE.MeshStandardMaterial({ color: '#f1f0ec', roughness: 0.8 }));
+MAT.stoolWood = fixed(new THREE.MeshStandardMaterial({ color: '#a8794c', roughness: 0.6 }));
+const weaveTex = (() => {   // "Paris" bistro weave: off-white strands with staggered grey dashes
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f1f0ec'; x.fillRect(0, 0, 256, 256);
+  x.fillStyle = '#5c6168';
+  for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) x.fillRect(i * 16 + (j % 2) * 8 + 2, j * 16 + 6, 7, 3);
+  x.strokeStyle = 'rgba(0,0,0,0.08)';
+  for (let j = 0; j <= 16; j++) { x.beginPath(); x.moveTo(0, j * 16); x.lineTo(256, j * 16); x.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3);
+  return t;
+})();
+MAT.weave = fixed(new THREE.MeshStandardMaterial({ map: weaveTex, roughness: 0.8 }));
+const curve3 = (pts, r) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 40, r, 6, false);
+function ironTable(g, prim, o) {
+  cyl(g, 0.25, 0.25, 0.022, prim, 0, 1.089, 0, 40);                                        // top Ø 50, 1,10 m
+  const iron = [new THREE.TorusGeometry(0.25, 0.008, 6, 40).rotateX(PI / 2).translate(0, 1.08, 0),
+    new THREE.TorusGeometry(0.19, 0.007, 6, 32).rotateX(PI / 2).translate(0, 1.065, 0),
+    new THREE.TorusGeometry(0.034, 0.012, 6, 16).rotateX(PI / 2).translate(0, 0.46, 0)];   // waist collar
+  const prof = [[0.19, 1.07], [0.13, 0.94], [0.06, 0.7], [0.032, 0.46], [0.06, 0.26], [0.17, 0.08], [0.28, 0.012]];
+  for (let k = 0; k < 4; k++) {
+    const a = PI / 4 + (k * PI) / 2, cx = Math.cos(a), cz = Math.sin(a);
+    iron.push(curve3(prof.map(([r, y]) => [r * cx, y, r * cz]), 0.009));
+    iron.push(new THREE.CylinderGeometry(0.02, 0.02, 0.01, 10).translate(0.28 * cx, 0.005, 0.28 * cz));   // foot pad
+  }
+  g.add(new THREE.Mesh(mergeLocal(iron), MAT.iron));
+  for (let i = 0; i < (o.stools || 0); i++) {
+    const a = (i / o.stools) * PI * 2 + PI / 6;
+    (o.stoolModel === 'industriel' ? stoolIndus : stoolBistro)(g, 0.58 * Math.sin(a), 0.58 * Math.cos(a));
+  }
+}
+/* Tabouret bistrot: woven seat Ø 38 cm at 75 cm, rattan-look tan aluminium legs (paired tubes), Y braces under
+   the seat, foot ring at 28 cm and white strap wraps at the joints. */
+function stoolBistro(g, x0 = 0, z0 = 0) {
+  const H = 0.75, tubes = [], wraps = [];
+  const at = (a, y) => { const r = 0.15 + (0.07 * (0.7 - y)) / 0.7; return [r * Math.cos(a), y, r * Math.sin(a)]; };
+  for (let k = 0; k < 4; k++) {
+    const a = PI / 4 + (k * PI) / 2, t = [-Math.sin(a), 0, Math.cos(a)];
+    for (const off of [-0.011, 0.011]) {
+      const A = at(a, 0.7), B = at(a, 0);
+      tubes.push(stick([A[0] + t[0] * off, A[1], A[2] + t[2] * off], [B[0] + t[0] * off, 0, B[2] + t[2] * off], 0.011, 0.011, 8));
+    }
+    const P = at(a, 0.55);
+    tubes.push(stick(P, [0.07 * Math.cos(a), 0.7, 0.07 * Math.sin(a)], 0.009, 0.009, 6));      // Y brace
+    for (const y of [0.28, 0.68]) { const q = at(a, y); wraps.push(new THREE.CylinderGeometry(0.03, 0.03, 0.035, 10).translate(q[0], y, q[2])); }
+  }
+  tubes.push(new THREE.TorusGeometry(0.15 + (0.07 * 0.42) / 0.7, 0.01, 6, 36).rotateX(PI / 2).translate(0, 0.28, 0));   // foot ring
+  const s = new THREE.Group(); s.position.set(x0, 0, z0);
+  s.add(new THREE.Mesh(mergeLocal(tubes), MAT.rattanTube), new THREE.Mesh(mergeLocal(wraps), MAT.wrap));
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.185, 0.055, 32), MAT.weave); seat.position.y = H - 0.0275; s.add(seat);
+  g.add(s);
+}
+/* Tabouret industriel: rust-brown iron, four splayed round legs, stretchers on the four sides at 20 cm,
+   ring under the seat, wooden round seat Ø 33 cm set in an iron rim at 70 cm. */
+function stoolIndus(g, x0 = 0, z0 = 0) {
+  const H = 0.7, iron = [];
+  const at = (sx, sz, y) => { const r = 0.12 + (0.075 * (0.68 - y)) / 0.68; return [sx * r, y, sz * r]; };
+  const C = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  for (const [sx, sz] of C) iron.push(stick(at(sx, sz, 0.68), at(sx, sz, 0), 0.011, 0.011, 8));
+  for (let k = 0; k < 4; k++) { const [ax, az] = C[k], [bx, bz] = C[(k + 1) % 4]; iron.push(stick(at(ax, az, 0.2), at(bx, bz, 0.2), 0.008, 0.008, 6)); }
+  iron.push(new THREE.TorusGeometry(0.165, 0.012, 6, 36).rotateX(PI / 2).translate(0, H - 0.015, 0));   // seat rim
+  iron.push(new THREE.TorusGeometry(0.135, 0.008, 6, 36).rotateX(PI / 2).translate(0, 0.66, 0));
+  const s = new THREE.Group(); s.position.set(x0, 0, z0);
+  s.add(new THREE.Mesh(mergeLocal(iron), MAT.iron));
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 32), MAT.stoolWood); seat.position.y = H - 0.015; s.add(seat);
+  g.add(s);
+}
+
 const KINDS = {
   tround: {
     label: 'Table ronde', glyph: '◉', color: '#f6f3ec', colorLabel: 'Nappe / plateau',
@@ -2268,6 +2341,21 @@ const KINDS = {
       for (const ch of g.children) { ch.position.x -= c.x; ch.position.z -= c.z; }
     },
     quote: (o) => ({ table_serpentine: o.count, [chairKey(o.chairModel)]: o.chairs ? 7 * o.count : 0, nappe_serpentine: o.cloth ? o.count : 0 }),
+  },
+  standingIron: {
+    label: 'Mange-debout fer forgé', glyph: '•', color: '#5a3826', colorLabel: 'Plateau', mat: { metalness: 0.55, roughness: 0.35 },
+    opts: {
+      stools: { label: 'Tabourets', type: 'select', values: [0, 2, 3, 4], names: { 0: 'Aucun' }, def: 0 },
+      stoolModel: { when: (o) => o.stools > 0, label: 'Modèle de tabouret', type: 'select', values: ['bistrot', 'industriel'], names: { bistrot: 'Bistrot rotin tressé', industriel: 'Industriel fer et bois' }, def: 'bistrot' },
+    },
+    build: ironTable,
+    quote: (o) => ({ mange_debout_fer: 1, ['tabouret_' + (o.stoolModel === 'industriel' ? 'industriel' : 'bistrot')]: o.stools || 0 }),
+  },
+  stool: {
+    label: 'Tabouret', glyph: '╥', color: '#d4a55a', noColor: true,
+    opts: { model: { label: 'Modèle', type: 'select', values: ['bistrot', 'industriel'], names: { bistrot: 'Bistrot rotin tressé', industriel: 'Industriel fer et bois' }, def: 'bistrot' } },
+    build(g, prim, o) { (o.model === 'industriel' ? stoolIndus : stoolBistro)(g); },
+    quote: (o) => ({ ['tabouret_' + (o.model === 'industriel' ? 'industriel' : 'bistrot')]: 1 }),
   },
   standing: {
     label: 'Mange-debout', glyph: '•', color: '#f6f3ec', colorLabel: 'Housse / plateau',
@@ -2736,9 +2824,14 @@ const CATALOG = [
     { kind: 'trect', label: 'Table buffet', sub: '1,80 × 0,76 m · nappe', opts: { seats: 0, cloth: true } },
     { kind: 'coffeeBamboo', label: 'Table basse bambou ronde', sub: 'Ø 1 m · h 35 cm · plateau à lattes' },
     { kind: 'standing', label: 'Mange-debout', sub: 'Ø 0,60 · h 1,10 m · housse' },
+    { kind: 'standingIron', label: 'Mange-debout fer forgé', sub: 'plateau Ø 50 cm · h 110 cm' },
+    { kind: 'standingIron', label: 'Fer forgé + 3 tabourets bistrot', sub: 'Ø 50 cm · h 110 cm · assises tressées', opts: { stools: 3, stoolModel: 'bistrot' } },
+    { kind: 'standingIron', label: 'Fer forgé + 2 tabourets industriels', sub: 'Ø 50 cm · h 110 cm · fer et bois', opts: { stools: 2, stoolModel: 'industriel' } },
   ]],
   ['Assises', [
     { kind: 'chair', label: 'Chaise bistrot', sub: '45 × 53 cm · h 90 cm · rotin' },
+    { kind: 'stool', label: 'Tabouret bistrot', sub: 'Ø 38 cm · h 75 cm · assise tressée' },
+    { kind: 'stool', label: 'Tabouret industriel', sub: 'Ø 33 cm · h 70 cm · fer et bois', opts: { model: 'industriel' } },
     { kind: 'chair', label: 'Chaise médaillon', sub: '49 × 45 cm · h 97 cm · cannage, lin écru', color: '#b39470', opts: { model: 'medaillon' } },
     { kind: 'chair', label: 'Chaise pliante', sub: '44 × 44 cm · h 92 cm', color: '#ece6da', opts: { model: 'pliante' } },
     { kind: 'chairrow', label: 'Rangée de 8 bistrot', sub: 'cérémonie · chaises bistrot' },
@@ -2830,7 +2923,7 @@ const CATALOG = [
 const ITEM_DEFS = [
   ['chaise_bistrot', 'Chaise bistrot'], ['chaise_medaillon', 'Chaise médaillon'], ['chaise', 'Chaise pliante'], ['table_ronde', 'Table ronde Ø 1,80 m'], ['table_ronde_150', 'Table ronde Ø 1,50 m'], ['nappe_ronde', 'Nappe ronde (Ø 1,80 m)'], ['nappe_ronde_150', 'Nappe ronde (Ø 1,50 m)'],
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'],
-  ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
+  ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
