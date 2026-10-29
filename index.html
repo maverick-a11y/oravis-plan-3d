@@ -2083,6 +2083,44 @@ function buildFlooring(g, prim, o) {
   }
 }
 
+/* Boule à facettes Ø 20 / 30 / 40 / 50 cm, hung on a short chain under a motor and turning slowly.
+   Facets ≈ 2,5 cm (flat-shaded mirror); in the evening view, light dots sweep the floor around it. */
+const DISCO_SIZES = [20, 30, 40, 50];
+const DOT = shared(new THREE.CircleGeometry(1, 10).rotateX(-PI / 2));
+function discoBall(g, prim, o) {
+  const r = (o.size || 30) / 200, h = o.height || 3, seg = Math.min(96, Math.max(24, Math.round((2 * PI * r) / 0.025)));
+  const spin = new THREE.Group(); spin.name = 'discoSpin'; spin.position.y = h; g.add(spin);
+  const geo = new THREE.SphereGeometry(r, seg, Math.round(seg / 2)).toNonIndexed(); geo.computeVertexNormals();
+  spin.add(new THREE.Mesh(geo, prim));
+  const top = h + r;
+  g.add(new THREE.Mesh(mergeLocal([
+    stick([0, top - 0.01, 0], [0, top + 0.5, 0], 0.004, 0.004, 6),                 // chain
+    new THREE.CylinderGeometry(0.045, 0.045, 0.08, 16).translate(0, top + 0.54, 0),   // motor
+    new THREE.BoxGeometry(0.02, 0.06, 0.02).translate(0, top + 0.61, 0),             // hanging eye
+  ]), MAT.black));
+  if (o.dots !== false) {
+    const dots = new THREE.Group(); dots.name = 'discoDots'; dots.visible = false;
+    const rnd = seeded(o.size * 31 + 7), n = 40 + o.size * 2, m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff').multiplyScalar(1.3), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    const inst = new THREE.InstancedMesh(DOT, mat, n);
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * PI * 2, d = 0.8 + Math.sqrt(rnd()) * (2 + h * 1.2), k = (0.03 + rnd() * 0.03) * (1 + d / 8);
+      inst.setMatrixAt(i, m4.compose(new THREE.Vector3(Math.cos(a) * d, 0.012, Math.sin(a) * d), q, new THREE.Vector3(k, 1, k)));
+    }
+    inst.userData.noShadow = true; dots.add(inst); g.add(dots);
+  }
+  const L = new THREE.PointLight('#fff4e0', 3, 0, 2); L.position.set(0.7, h - 0.9, 0.7); g.add(L);
+}
+function animateDisco(t) {
+  for (const o of objects) {
+    if (o.userData.kind !== 'disco' || !o.visible) continue;
+    const a = o.userData.opts.spin === false ? 0 : t * 0.55;
+    o.getObjectByName('discoSpin').rotation.y = a;
+    const dots = o.getObjectByName('discoDots');
+    if (dots) { dots.rotation.y = a; dots.visible = night; }
+  }
+}
+
 function animateCarousels(t) {
   for (const o of objects) {
     if (!o.userData.kind.startsWith('carousel') || !o.visible || o.userData.opts?.dancing === false) continue;
@@ -2584,6 +2622,17 @@ const KINDS = {
     },
     quote: (o) => { const t = fairyTotals(o); return { poteau_guirlande: t.poles, mat_guirlande_4m: t.tall, guirlande_m: t.buy, guirlande_brins: t.n, cable_ciel_m: t.cable, piquet_hauban: t.stakes }; },
   },
+  disco: {
+    label: 'Boule à facettes', glyph: '◍', color: '#dfe3e8', colorLabel: 'Miroirs', mat: { metalness: 1, roughness: 0.12, flatShading: true },
+    opts: {
+      size: { label: 'Diamètre', type: 'select', values: DISCO_SIZES, suffix: ' cm', def: 30 },
+      height: { label: 'Hauteur (centre)', type: 'select', values: [2.5, 3, 3.5, 4, 5], names: { 2.5: '2,50 m', 3: '3,00 m', 3.5: '3,50 m', 4: '4,00 m', 5: '5,00 m' }, def: 3 },
+      spin: { label: 'Rotation', type: 'bool', def: true },
+      dots: { label: 'Taches lumineuses (vue Soirée)', type: 'bool', def: true },
+    },
+    build: discoBall,
+    quote: (o) => ({ ['boule_facettes_' + (DISCO_SIZES.includes(o.size) ? o.size : 30)]: 1 }),
+  },
   speaker: {
     label: 'Enceinte', glyph: '◘', color: '#22252b',
     build(g, prim) { cyl(g, 0.02, 0.02, 1.4, MAT.metal, 0, 0.7, 0, 8); cyl(g, 0.02, 0.28, 0.4, MAT.metal, 0, 0.2, 0, 3); box(g, 0.34, 0.52, 0.3, prim, 0, 1.65, 0); },
@@ -2741,6 +2790,10 @@ const CATALOG = [
     { kind: 'dj', label: 'DJ + table de mixage', sub: 'booth 2,00 × 0,70 m · platines, mixeur, DJ animé' },
     { kind: 'dj', label: 'DJ booth bois', sub: 'façade bois clair · LED chaude', color: '#c9a97c', opts: { style: 'bois', led: '#ffb347' } },
     { kind: 'dj', label: 'Régie DJ nappée', sub: 'table nappée noire · sans LED', opts: { style: 'table' } },
+    { kind: 'disco', label: 'Boule à facettes Ø 20 cm', sub: 'moteur + chaîne · suspendue à 3 m', opts: { size: 20 } },
+    { kind: 'disco', label: 'Boule à facettes Ø 30 cm', sub: 'moteur + chaîne · suspendue à 3 m', opts: { size: 30 } },
+    { kind: 'disco', label: 'Boule à facettes Ø 40 cm', sub: 'moteur + chaîne · suspendue à 3 m', opts: { size: 40 } },
+    { kind: 'disco', label: 'Boule à facettes Ø 50 cm', sub: 'moteur + chaîne · suspendue à 3 m', opts: { size: 50 } },
     { kind: 'speaker', label: 'Enceinte sur pied', sub: 'h 1,90 m' },
     { kind: 'light', label: 'Projecteur d\'ambiance', sub: 'éclaire la scène 3D' },
   ]],
@@ -2761,7 +2814,7 @@ const ITEM_DEFS = [
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
-  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
+  ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
 
@@ -2894,6 +2947,7 @@ renderer.setAnimationLoop(() => {
   animateDancers(tNow);
   animateCarousels(tNow);
   animateTwinkle(tNow);
+  animateDisco(tNow);
   if (selected && keepAboveFloor(selected)) fillInspector();
   if (selected) selBox.box.setFromObject(selected);
   composer.render();
