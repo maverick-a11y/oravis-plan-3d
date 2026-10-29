@@ -2107,12 +2107,12 @@ function buildFlooring(g, prim, o) {
 const DISCO_SIZES = [20, 30, 40, 50];
 const DOT = shared(new THREE.CircleGeometry(1, 10).rotateX(-PI / 2));
 function discoBall(g, prim, o) {
-  const r = (o.size || 30) / 200, h = o.height || 3, seg = Math.min(96, Math.max(24, Math.round((2 * PI * r) / 0.025)));
+  const r = (o.size || 30) / 200, onFloor = o.height === 0, h = onFloor ? r + 0.002 : Math.max(o.height ?? 3, r + 0.002), seg = Math.min(96, Math.max(24, Math.round((2 * PI * r) / 0.025)));
   const spin = new THREE.Group(); spin.name = 'discoSpin'; spin.position.y = h; g.add(spin);
   const geo = new THREE.SphereGeometry(r, seg, Math.round(seg / 2)).toNonIndexed(); geo.computeVertexNormals();
   spin.add(new THREE.Mesh(geo, prim));
   const top = h + r;
-  g.add(new THREE.Mesh(mergeLocal([
+  if (!onFloor) g.add(new THREE.Mesh(mergeLocal([
     stick([0, top - 0.01, 0], [0, top + 0.5, 0], 0.004, 0.004, 6),                 // chain
     new THREE.CylinderGeometry(0.045, 0.045, 0.08, 16).translate(0, top + 0.54, 0),   // motor
     new THREE.BoxGeometry(0.02, 0.06, 0.02).translate(0, top + 0.61, 0),             // hanging eye
@@ -2126,9 +2126,9 @@ function discoBall(g, prim, o) {
       const a = rnd() * PI * 2, d = 0.8 + Math.sqrt(rnd()) * (2 + h * 1.2), k = (0.03 + rnd() * 0.03) * (1 + d / 8);
       inst.setMatrixAt(i, m4.compose(new THREE.Vector3(Math.cos(a) * d, 0.012, Math.sin(a) * d), q, new THREE.Vector3(k, 1, k)));
     }
-    inst.userData.noShadow = true; dots.add(inst); g.add(dots);
+    inst.userData.noShadow = true; inst.userData.noFloor = true; dots.add(inst); g.add(dots);
   }
-  const L = new THREE.PointLight('#fff4e0', 3, 0, 2); L.position.set(0.7, h - 0.9, 0.7); g.add(L);
+  const L = new THREE.PointLight('#fff4e0', 3, 0, 2); L.position.set(0.7, Math.max(0.4, h - 0.9), 0.7); g.add(L);
 }
 function animateDisco(t) {
   for (const o of objects) {
@@ -2136,7 +2136,7 @@ function animateDisco(t) {
     const a = o.userData.opts.spin === false ? 0 : t * 0.55;
     o.getObjectByName('discoSpin').rotation.y = a;
     const dots = o.getObjectByName('discoDots');
-    if (dots) { dots.rotation.y = a; dots.visible = night; }
+    if (dots) { dots.rotation.y = a; dots.visible = night; dots.position.y = -o.position.y; }   // dots stay on the floor
   }
 }
 
@@ -2645,7 +2645,7 @@ const KINDS = {
     label: 'Boule à facettes', glyph: '◍', color: '#dfe3e8', colorLabel: 'Miroirs', mat: { metalness: 1, roughness: 0.12, flatShading: true },
     opts: {
       size: { label: 'Diamètre', type: 'select', values: DISCO_SIZES, suffix: ' cm', def: 30 },
-      height: { label: 'Hauteur (centre)', type: 'select', values: [2.5, 3, 3.5, 4, 5], names: { 2.5: '2,50 m', 3: '3,00 m', 3.5: '3,50 m', 4: '4,00 m', 5: '5,00 m' }, def: 3 },
+      height: { label: 'Hauteur (centre)', type: 'select', values: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5], names: { 0: 'Posée au sol', 0.5: '0,50 m', 1: '1,00 m', 1.5: '1,50 m', 2: '2,00 m', 2.5: '2,50 m', 3: '3,00 m', 3.5: '3,50 m', 4: '4,00 m', 5: '5,00 m' }, def: 3 },
       spin: { label: 'Rotation', type: 'bool', def: true },
       dots: { label: 'Taches lumineuses (vue Soirée)', type: 'bool', def: true },
     },
@@ -3123,7 +3123,7 @@ function lowestY(g) {
   g.updateMatrixWorld(true);
   let m = Infinity;
   g.traverse((c) => {
-    if (!c.isMesh || c.name === 'beam' || !c.visible) return;
+    if (!c.isMesh || c.name === 'beam' || c.userData.noFloor || !c.visible) return;
     if (!c.geometry.boundingBox) c.geometry.computeBoundingBox();
     _gb.copy(c.geometry.boundingBox).applyMatrix4(c.matrixWorld);
     if (_gb.min.y < m) m = _gb.min.y;
