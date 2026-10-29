@@ -703,9 +703,9 @@ const STRETCH = {
 const STRETCH_CLOSED = { ouverts: [], fermes: [[-1, -1], [1, -1], [1, 1], [-1, 1]], 'un-cote': [[-1, -1], [-1, 1]] };
 const closedOf = (o) => STRETCH_CLOSED[o.corners] || [];
 /* Twinkling garland under the fabric, in one bay between two centre masts (left or right bay of the row).
-   Each strand hangs straight down from the carrier cable between the two masts (a light curtain, 10 cm off the
-   ground), and from the cable runs up under the fabric to its hem on both long sides, or one only (following
-   the scallops). Fine micro-LEDs every 10 cm. */
+   Each strand starts on the ground at one long side, rises straight up to the fabric hem above it, runs under the
+   fabric up to the carrier cable between the two masts, goes over it and ends on the hem of the opposite side
+   (both hem points follow the scallops). Fine micro-LEDs every 10 cm. */
 const mastRow = (T) => T.peaks.filter(([, z]) => Math.abs(z) < 1e-6).map(([x]) => x).sort((a, b) => a - b);
 const twinkleOk = (o) => mastRow(STRETCH[o.size] || STRETCH['15x10.5']).length >= 2;
 function twinkleRun(T, o) {
@@ -713,21 +713,21 @@ function twinkleRun(T, o) {
   if (row.length < 2) return null;
   const [xa, xb] = o.twBay === 'droite' ? row.slice(-2) : row.slice(0, 2);
   const { L, W, sx, H, peak } = T, yc = Math.min(peak - 0.6, H + 0.05), y0 = H - 0.15, sag = 0.75, pull = 0.55;
-  const sides = o.twHem === 'avant' ? [1] : o.twHem === 'arriere' ? [-1] : [1, -1], drop = o.twDrop !== false;
-  const step = (o.twStep || 30) / 100, m = 0.35;
+  const s = o.twSide === 'arriere' ? -1 : 1, step = (o.twStep || 30) / 100, m = 0.35;
   const n = Math.max(1, Math.round((xb - xa - 2 * m) / step)), strands = [];
   const d3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   for (let i = 0; i <= n; i++) {
     const x = xa + m + (i * (xb - xa - 2 * m)) / n, w = Math.sin(PI * (((x + L / 2) / sx) % 1));
-    const C = [x, yc + 0.015, 0];
-    if (drop) strands.push({ a: C, b: [x, 0.1, 0], d: 0, len: C[1] - 0.1 });            // straight down to the ground
-    for (const sd of sides) {                                                         // up to the hem
-      const B = [x, y0 - sag * w, sd * (W / 2 - pull * w)], span = d3(C, B), dd = 0.05 * span + 0.1;
-      strands.push({ a: C, b: B, d: dd, len: span + (8 * dd * dd) / (3 * span) });
+    const zh = W / 2 - pull * w, yh = y0 - sag * w;
+    const G = [x, 0.05, s * zh], B1 = [x, yh, s * zh], C = [x, yc + 0.015, 0], B2 = [x, yh, -s * zh];
+    strands.push({ a: G, b: B1, d: 0, len: yh - 0.05 });                                // ground → hem, straight up
+    for (const [p, q] of [[B1, C], [C, B2]]) {                                        // hem → over the cable → opposite hem
+      const span = d3(p, q), dd = 0.05 * span + 0.1;
+      strands.push({ a: p, b: q, d: dd, len: span + (8 * dd * dd) / (3 * span) });
     }
   }
   const len = strands.reduce((t, x) => t + x.len, 0);
-  return { strands, n: n + 1, len, buy: Math.ceil(len * 1.1), cable: [[xa, yc, 0], [xb, yc, 0]], bay: xb - xa, drop, sides };
+  return { strands, n: n + 1, len, buy: Math.ceil(len * 1.1), cable: [[xa, yc, 0], [xb, yc, 0]], bay: xb - xa };
 }
 const TWINKLE_BULB = shared(new THREE.SphereGeometry(0.02, 6, 4));
 const _tc = new THREE.Color();
@@ -2412,14 +2412,13 @@ const KINDS = {
       lights: { label: 'Guirlandes lumineuses', type: 'select', values: ['aucune', 'normale', 'guinguette', 'dense'], names: { aucune: 'Aucune', normale: 'Fine, étoile 1 brin tous les 70 cm', guinguette: 'Guinguette, 1 brin par poteau (3 ampoules/m)', dense: 'Fine, étoile 1 brin tous les 70 cm' }, def: 'aucune' },
       twinkle: { when: twinkleOk, label: 'Guirlande scintillante entre 2 mâts', type: 'bool', def: false },
       twBay: { when: (o) => o.twinkle && twinkleOk(o) && mastRow(STRETCH[o.size]).length > 2, label: 'Travée', type: 'select', values: ['gauche', 'droite'], names: { gauche: 'Entre les mâts de gauche', droite: 'Entre les mâts de droite' }, def: 'gauche' },
-      twDrop: { when: (o) => o.twinkle && twinkleOk(o), label: 'Rideau du filin jusqu\'au sol', type: 'bool', def: true },
-      twHem: { when: (o) => o.twinkle && twinkleOk(o), label: 'Accroche au bord de toile', type: 'select', values: ['deux', 'avant', 'arriere'], names: { deux: 'Des 2 côtés', avant: 'Côté avant seulement', arriere: 'Côté arrière seulement' }, def: 'deux' },
+      twSide: { when: (o) => o.twinkle && twinkleOk(o), label: 'Départ au sol', type: 'select', values: ['avant', 'arriere'], names: { avant: 'Côté avant (finit au bord arrière)', arriere: 'Côté arrière (finit au bord avant)' }, def: 'avant' },
       twStep: { when: (o) => o.twinkle && twinkleOk(o), label: 'Écart entre brins', type: 'select', values: [20, 30, 50], suffix: ' cm', def: 30 },
       seeThrough: SEE,
     },
     info(o) {
       const T0 = STRETCH[o.size] || STRETCH['15x10.5'], tw = o.twinkle ? twinkleRun(T0, o) : null;
-      const twTxt = tw ? `Guirlande scintillante : ${tw.n} brins tous les ${o.twStep || 30} cm (${tw.drop ? 'rideau filin → sol + ' : ''}filin → bord de toile ${tw.sides.length > 1 ? 'des 2 côtés' : 'd\'un côté'}) · ${Math.round(tw.len)} m (+10 % de marge = ${tw.buy} m)` + (!o.lights || o.lights === 'aucune' ? ` · filin entre mâts ${fmtM(tw.bay)} m` : '') : '';
+      const twTxt = tw ? `Guirlande scintillante : ${tw.n} brins tous les ${o.twStep || 30} cm (sol → bord de toile → par-dessus le filin → bord opposé) · ${Math.round(tw.len)} m (+10 % de marge = ${tw.buy} m)` + (!o.lights || o.lights === 'aucune' ? ` · filin entre mâts ${fmtM(tw.bay)} m` : '') : '';
       const base = stretchLightsInfo(o);
       return [base, twTxt].filter(Boolean).join(' · ');
     },
@@ -2694,7 +2693,7 @@ const CATALOG = [
     { kind: 'stretch', label: 'Stretch 10,5 × 15 m + guirlandes', sub: 'éclairage guinguette en étoile', opts: { lights: 'normale' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 15 m fermée', sub: 'angles fermés, toile tirée au sol', opts: { corners: 'fermes' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m', sub: '3 mâts · implantation 27 × 16,5 m', opts: { size: '21x10.5' } },
-    { kind: 'stretch', label: 'Stretch 10,5 × 21 m + scintillant', sub: '220 m² · scintillant : rideau sous le filin + bords de toile', opts: { size: '21x10.5', twinkle: true } },
+    { kind: 'stretch', label: 'Stretch 10,5 × 21 m + scintillant', sub: '220 m² · scintillant du sol, par-dessus le filin, d\'un bord à l\'autre', opts: { size: '21x10.5', twinkle: true } },
     { kind: 'stretch', label: 'Stretch 21 × 15 m', sub: '6 mâts · implantation 27 × 21 m', opts: { size: '21x15' } },
     { kind: 'shade', label: 'Voile d\'ombrage 4 × 5 m', sub: '4 poteaux bambou · implantation 10 × 11 m' },
     { kind: 'shade', label: '4 voiles d\'ombrage accrochées', sub: 'bloc 8 × 10 m · poteaux partagés', opts: { count: 4 } },
