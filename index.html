@@ -736,76 +736,6 @@ const STRETCH = {
 // Closed corners (fabric down to the ground) carry no strand on their last bay, or it would cross the cloth.
 const STRETCH_CLOSED = { ouverts: [], fermes: [[-1, -1], [1, -1], [1, 1], [-1, 1]], 'un-cote': [[-1, -1], [-1, 1]] };
 const closedOf = (o) => STRETCH_CLOSED[o.corners] || [];
-/* Jumelage: two stretch tents brought side to side hook together automatically (see autoJoin). A side can be
-   joined over its whole length or only part of it (a 10,5 m side hooked onto the 21 m side of a bigger tent).
-   Over the joint the perimeter poles are removed; the two hems are clipped together with a carabiner in every
-   eyelet (one every 70 cm, counted from the corners, so the joint always starts on an eyelet) and a 50 cm strip of
-   the same fabric covers the joint as a gutter. The joined hem runs straight and dips a little at mid-span; on the
-   rest of a partly joined side the hem keeps its scallops between the remaining poles and the ends of the joint.
-   Joined sides are kept in opts.jn, e.g. "zp*,xm@4.2-14.7": xm / xp = ends (x = ∓L/2), zm / zp = long sides
-   (z = ∓W/2), measured from the -x / -z corner; "*" marks the tent that carries the gutter and the poles at the
-   ends of the joint (the one whose whole side is joined). */
-const EYELET = 0.7, GUTTER_W = 0.5, JOIN_SNAP = 1.5, SIDES = ['xm', 'xp', 'zm', 'zp'];
-const jointY = (H, len, u) => H - Math.min(0.5, 0.04 * len) * Math.sin(PI * u);
-const sideLen = (T, k) => (k[0] === 'x' ? T.W : T.L);
-function jnOf(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = {};
-  for (const t of String(o.jn || '').split(',')) {
-    const m = t.match(/^(xm|xp|zm|zp)(\*?)(?:@([\d.]+)-([\d.]+))?$/);
-    if (!m) continue;
-    const k = m[1];
-    j[k] = true; if (m[2]) j[k + '*'] = true;
-    (j[k + '@'] ||= []).push(m[3] ? [+m[3], +m[4]] : [0, sideLen(T, k)]);
-  }
-  return j;
-}
-const onSide = (T, k, x, z) => Math.abs(k[0] === 'x' ? x - (k[1] === 'm' ? -T.L / 2 : T.L / 2) : z - (k[1] === 'm' ? -T.W / 2 : T.W / 2)) < 1e-6;
-const sideS = (T, k, x, z) => (k[0] === 'x' ? z + T.W / 2 : x + T.L / 2);
-// Joints passing through a point of the tent outline: [side, the point is an end of that joint].
-function jointHits(T, joined, x, z) {
-  const out = [];
-  for (const k of SIDES) if (joined[k] && onSide(T, k, x, z)) {
-    const v = sideS(T, k, x, z);
-    for (const [s0, s1] of joined[k + '@']) if (v > s0 - 1e-3 && v < s1 + 1e-3) out.push([k, Math.abs(v - s0) < 1e-3 || Math.abs(v - s1) < 1e-3]);
-  }
-  return out;
-}
-// A perimeter pole stays unless it is on a joint (the tent marked * keeps the two poles at the ends of its joint).
-const poleKept = (T, joined, x, z) => { const h = jointHits(T, joined, x, z); return !h.length || h.every(([k, end]) => end && joined[k + '*']); };
-function perimOf(T) {
-  const { L, W, sx, sz } = T, p = [];
-  for (let x = -L / 2; x <= L / 2 + 1e-6; x += sx) p.push([x, -W / 2], [x, W / 2]);
-  for (let z = -W / 2 + sz; z < W / 2 - 1e-6; z += sz) p.push([-L / 2, z], [L / 2, z]);
-  return p;
-}
-/* Hem of side k at distance s from its start: straight over a joint, otherwise scalloped between its supports
-   (the poles left on that side and the ends of the joints). Returns the height and how far it is pulled inward. */
-function hemAt(T, k, s, joined) {
-  const len = sideLen(T, k), sp = k[0] === 'x' ? T.sz : T.sx, sag = 0.75, pull = 0.55;
-  const iv = joined[k] ? joined[k + '@'] : null;
-  if (!iv) { const w = Math.sin(PI * ((s / sp) % 1)); return { y: T.H - sag * w, w: pull * w }; }
-  for (const [s0, s1] of iv) if (s > s0 - 1e-6 && s < s1 + 1e-6) return { y: jointY(T.H, s1 - s0, (s - s0) / (s1 - s0)), w: 0 };
-  const sup = iv.flat();
-  for (let p = 0; p <= len + 1e-6; p += sp) if (!iv.some(([s0, s1]) => p > s0 - 1e-6 && p < s1 + 1e-6)) sup.push(p);
-  sup.sort((a, b) => a - b);
-  let a = 0, b = len;
-  for (const p of sup) { if (p <= s) a = p; else { b = p; break; } }
-  const span = b - a, w = span > 1e-6 ? Math.sin((PI * (s - a)) / span) * Math.min(1, span / sp) : 0;
-  return { y: T.H - sag * w, w: pull * w };
-}
-// Closed corners never sit on a joint.
-const closedFor = (o, j) => { const T = STRETCH[o.size] || STRETCH['15x10.5']; return closedOf(o).filter(([cx, cz]) => !jointHits(T, j, (cx * T.L) / 2, (cz * T.W) / 2).length); };
-const carabOf = (len) => Math.floor(len / EYELET + 1e-6) + 1;
-function joinTotals(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = jnOf(o), sides = SIDES.filter((k) => j[k]);
-  const lens = sides.flatMap((k) => j[k + '@'].map(([s0, s1]) => s1 - s0));
-  // a joint is shared by two tents: each counts half of it (the récap adds both halves)
-  return { sides, lens, carab: lens.reduce((t, l) => t + carabOf(l) / 2, 0), gutter: lens.reduce((t, l) => t + l / 2, 0), removed: perimOf(T).filter(([x, z]) => jointHits(T, j, x, z).some(([, end]) => !end)).length };   // poles at the joint ends stay (shared)
-}
-function stretchLights(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = jnOf(o), t = lightTotals(T, o.lights === 'guinguette' ? 'guinguette' : 'fine', closedFor(o, j), j);
-  return { n: t.n, m: t.m, buy: t.buy, bulbs: t.bulbs, cable: t.cable, total: t.route ? t.route.total : t.m, extra: t.route ? t.route.extra : 0, feeds: t.route ? 1 : 0 };
-}
 /* Twinkling garland under the fabric, in one bay between two centre masts (left or right bay of the row).
    Each strand starts on the ground at one long side, rises straight up to the fabric hem above it, runs under the
    fabric up to the carrier cable between the two masts, goes over it and ends on the hem of the opposite side
@@ -860,8 +790,8 @@ function addTwinkle(g, tw) {
 }
 function stretchLightsInfo(o) {
   if (!o.lights || o.lights === 'aucune') return '';
-  const gg = o.lights === 'guinguette', t = stretchLights(o);
-  if (gg) return `1 départ, guirlande continue : ${Math.round(t.total)} m (${Math.round(t.m)} m de brins + ${Math.round(t.extra)} m de repassage) · +10 % de marge = ${t.buy} m · ${t.bulbs} ampoules` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
+  const gg = o.lights === 'guinguette', t = lightTotals(STRETCH[o.size] || STRETCH['15x10.5'], gg ? 'guinguette' : 'fine', closedOf(o));
+  if (gg) return `1 départ, guirlande continue : ${Math.round(t.route.total)} m (${Math.round(t.m)} m de brins + ${Math.round(t.route.extra)} m de repassage) · +10 % de marge = ${t.buy} m · ${t.bulbs} ampoules` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
   return `${t.n} brins · ${Math.round(t.m)} m de guirlande (+10 % de marge = ${t.buy} m)` + (t.cable ? ` · câble porteur ${String(t.cable).replace('.', ',')} m` : '');
 }
 // Each bulb fades in and out at its own pace; brightness follows the "Ampoules" setting.
@@ -875,8 +805,7 @@ function animateTwinkle(t) {
     inst.instanceColor.needsUpdate = true;
   }
 }
-const SIDE_KEYS = ['zm', 'xp', 'zp', 'xm'];   // order of the edges walked in stretchStrands
-function stretchStrands(T, mode = 'fine', closed = [], joined = {}) {
+function stretchStrands(T, mode = 'fine', closed = []) {
   const { L, W, sx, sz, H, peak, peaks } = T, step = 0.7, sag = 0.75, pull = 0.55, y0 = H - 0.15, ym = Math.min(peak - 0.6, H + 0.05);   // cable just under the fabric between masts
   const edges = [                                   // [start, direction, length, pole spacing, inward normal]
     [[-L / 2, -W / 2], [1, 0], L, sx, [0, 1]], [[L / 2, -W / 2], [0, 1], W, sz, [-1, 0]],
@@ -891,16 +820,14 @@ function stretchStrands(T, mode = 'fine', closed = [], joined = {}) {
     if (gg) break;
     let rest = u, k = 0;
     while (rest > edges[k][2] + 1e-9) { rest -= edges[k][2]; k++; }
-    const [[ox, oz], [dx, dz], len, , [nx, nz]] = edges[k];
+    const [[ox, oz], [dx, dz], , sp, [nx, nz]] = edges[k], t = (rest / sp) % 1, w = Math.sin(PI * t);
     if (inClosedBay(ox + dx * rest, oz + dz * rest)) continue;
-    const h = hemAt(T, SIDE_KEYS[k], dx + dz > 0 ? rest : len - rest, joined);
-    anchors.push([ox + dx * rest + nx * h.w, h.y - 0.15, oz + dz * rest + nz * h.w]);
+    anchors.push([ox + dx * rest + nx * pull * w, y0 - sag * w, oz + dz * rest + nz * pull * w]);
   }
   if (gg) {
     for (let x = -L / 2; x <= L / 2 + 1e-6; x += sx) anchors.push([x, y0, -W / 2], [x, y0, W / 2]);
     for (let z = -W / 2 + sz; z < W / 2 - 1e-6; z += sz) anchors.push([-L / 2, y0, z], [L / 2, y0, z]);
     for (let i = anchors.length - 1; i >= 0; i--) if (inClosedBay(anchors[i][0], anchors[i][2])) anchors.splice(i, 1);
-    for (const p of anchors) for (const k of SIDES) if (joined[k] && onSide(T, k, p[0], p[2])) p[1] = Math.min(p[1], hemAt(T, k, sideS(T, k, p[0], p[2]), joined).y - 0.15);
   }
   const rows = new Map();
   for (const [x, z] of peaks) { const key = z.toFixed(2); if (!rows.has(key)) rows.set(key, []); rows.get(key).push([x, ym, z]); }
@@ -964,8 +891,8 @@ const toEdges = (strands) => strands.map((s2) => ({ p: [s2.a[0], s2.a[2], s2.a[1
 // Extra links of the continuous route (not part of the drawn design) turned into strands to draw.
 const linkStrands = (route) => route.links.map(([p, q]) => { const span = Math.hypot(q[0] - p[0], q[1] - p[1]), d = 0.06 * span + 0.15; return { a: [p[0], p[2] ?? HOOK, p[1]], b: [q[0], q[2] ?? HOOK, q[1]], d, len: sagLen(span) }; });
 // Under a stretch tent the route may also follow the fabric edge (pole to pole) and the carrier cable.
-function stretchRoute(T, closed = [], joined = {}) {
-  const { strands } = stretchStrands(T, 'guinguette', closed, joined);
+function stretchRoute(T, closed = []) {
+  const { strands } = stretchStrands(T, 'guinguette', closed);
   const ring = [...new Map(strands.map((s2) => [`${s2.b[0]},${s2.b[2]}`, [s2.b[0], s2.b[2], s2.b[1]]])).values()]
     .sort((p, q) => Math.atan2(p[1] / T.W, p[0] / T.L) - Math.atan2(q[1] / T.W, q[0] / T.L));
   // Along the fabric edge, but never across a closed corner (the cloth goes down to the ground there).
@@ -976,9 +903,9 @@ function stretchRoute(T, closed = [], joined = {}) {
   for (const row of rows.values()) { const r2 = [...row.values()].sort((p, q) => p[0] - q[0]); for (let i = 0; i < r2.length - 1; i++) conn.push({ p: r2[i], q: r2[i + 1], len: r2[i + 1][0] - r2[i][0] }); }
   return continuousRoute(toEdges(strands), conn);
 }
-const lightTotals = (T, mode = 'fine', closed = [], joined = {}) => {
-  const { strands, cable } = stretchStrands(T, mode, closed, joined), m = strands.reduce((t, x) => t + x.len, 0);
-  const route = mode === 'guinguette' ? stretchRoute(T, closed, joined) : null, total = route ? route.total : m, buy = Math.ceil(total * 1.1);
+const lightTotals = (T, mode = 'fine', closed = []) => {
+  const { strands, cable } = stretchStrands(T, mode, closed), m = strands.reduce((t, x) => t + x.len, 0);
+  const route = mode === 'guinguette' ? stretchRoute(T, closed) : null, total = route ? route.total : m, buy = Math.ceil(total * 1.1);
   return { n: strands.length, m, route, buy, bulbs: buy * 3, cable: Math.ceil(cable * 10) / 10 };
 };
 // Power feed: a small box at the foot of the starting pole and the drop cable up to the garland.
@@ -1178,26 +1105,7 @@ function addStringLights(g, { strands, cables }, masts, style = 'fine') {
 }
 
 MAT.hem = fixed(new THREE.LineBasicMaterial({ color: '#2a2a2a' }));
-// Gutter (50 cm strip of the tent fabric laid over the joint, slightly V-shaped) and one carabiner per eyelet.
-function addJoint(g, prim, a, b, H) {
-  const len = Math.hypot(b[0] - a[0], b[1] - a[1]), d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], nr = [-d[1], d[0]];
-  const N = Math.max(8, Math.round(len / 0.2)), pos = [], idx = [];
-  for (let i = 0; i <= N; i++) {
-    const u = i / N, x = a[0] + (b[0] - a[0]) * u, z = a[1] + (b[1] - a[1]) * u, y = jointY(H, len, u);
-    for (const sd of [-1, 0, 1]) pos.push(x + nr[0] * sd * GUTTER_W / 2, y + (sd ? 0.1 : 0.035), z + nr[1] * sd * GUTTER_W / 2);
-  }
-  for (let i = 0; i < N; i++) for (let c = 0; c < 2; c++) { const q = i * 3 + c; idx.push(q, q + 3, q + 1, q + 1, q + 3, q + 4); }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
-  const gut = new THREE.Mesh(geo, prim); gut.name = 'gutter'; g.add(gut);
-  const rings = [], k = Math.floor(len / EYELET + 1e-6), off = (len - k * EYELET) / 2, ang = Math.atan2(d[0], d[1]);
-  for (let i = 0; i <= k; i++) {
-    const t = off + i * EYELET, u = t / len;
-    rings.push(new THREE.TorusGeometry(0.03, 0.005, 5, 12).scale(1, 1.5, 1).rotateY(ang).translate(a[0] + d[0] * t, jointY(H, len, u) - 0.05, a[1] + d[1] * t));
-  }
-  g.add(new THREE.Mesh(mergeLocal(rings), MAT.metal));
-}
-function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = {}) {
+function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5) {
   // The fabric is relaxed as a tensioned membrane in 3D: every inner point settles at the average of its
   // neighbours, between fixed points (fabric edge on the poles, mast tops, ground anchors of closed corners).
   // Edges are scalloped: between two poles the hem dips and is pulled inward. At a closed corner the cloth
@@ -1213,9 +1121,8 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
     const onZ = j === 0 || j === NZ, onX = i === 0 || i === NX;
     if (onZ || onX) {
       fixedNode[k] = 1;
-      const TT = { L, W: Wd, sx, sz, H };
-      if (onZ) { const h = hemAt(TT, j === 0 ? 'zm' : 'zp', X(i) + L / 2, joined); y = h.y; z += (j === 0 ? 1 : -1) * h.w; }
-      else { const h = hemAt(TT, i === 0 ? 'xm' : 'xp', Z(j) + Wd / 2, joined); y = h.y; x += (i === 0 ? 1 : -1) * h.w; }
+      if (onZ) { const w = Math.sin(PI * tx(x)); y = H - sag * w; z += (j === 0 ? 1 : -1) * pull * w; }
+      else { const w = Math.sin(PI * tz(z)); y = H - sag * w; x += (i === 0 ? 1 : -1) * pull * w; }
       // Closed corner: only the last bay changes. The hem stays on top of the neighbouring pole and runs
       // down in a straight, slightly scalloped line to a ground stake out on the diagonal, so the cloth slopes down at about 30°.
       for (const [cx, cz] of closed) {
@@ -2708,7 +2615,6 @@ const KINDS = {
     opts: {
       size: { label: 'Taille', type: 'select', values: Object.keys(STRETCH), names: Object.fromEntries(Object.entries(STRETCH).map(([k, v]) => [k, v.name])), def: '15x10.5' },
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
-      jn: { hidden: true, def: '' },   // joined sides, set automatically when another tent is brought alongside
       guys: { label: 'Haubans', type: 'bool', def: true },
       lights: { label: 'Guirlandes lumineuses', type: 'select', values: ['aucune', 'normale', 'guinguette', 'dense'], names: { aucune: 'Aucune', normale: 'Fine, étoile 1 brin tous les 70 cm', guinguette: 'Guinguette, 1 brin par poteau (3 ampoules/m)', dense: 'Fine, étoile 1 brin tous les 70 cm' }, def: 'aucune' },
       twinkle: { when: twinkleOk, label: 'Guirlande scintillante entre 2 mâts', type: 'bool', def: false },
@@ -2720,44 +2626,36 @@ const KINDS = {
     info(o) {
       const T0 = STRETCH[o.size] || STRETCH['15x10.5'], tw = o.twinkle ? twinkleRun(T0, o) : null;
       const twTxt = tw ? `Guirlande scintillante : ${tw.n} brins tous les ${o.twStep || 30} cm (sol → bord de toile → par-dessus le filin → bord opposé) · ${Math.round(tw.len)} m (+10 % de marge = ${tw.buy} m)` + (!o.lights || o.lights === 'aucune' ? ` · filin entre mâts ${fmtM(tw.bay)} m` : '') : '';
-      const base = stretchLightsInfo(o), jt = joinTotals(o);
-      const jTxt = jt.sides.length ? `Jumelée : ${jt.lens.length} jonction${jt.lens.length > 1 ? 's' : ''} (${jt.lens.map((l) => fmtM(Math.round(l * 100) / 100) + ' m').join(' + ')}) · ${jt.lens.reduce((t, l) => t + carabOf(l), 0)} mousquetons (1 par œillet, tous les 70 cm) · gouttière ${jt.lens.map((l) => fmtM(Math.round(l * 100) / 100)).join(' + ')} m × 50 cm · ${jt.removed} poteaux de tour retirés` : '';
-      return [jTxt, base, twTxt].filter(Boolean).join(' · ');
+      const base = stretchLightsInfo(o);
+      return [base, twTxt].filter(Boolean).join(' · ');
     },
-    build(g, prim, o) { KINDS.stretch.stretchOne(g, prim, o, STRETCH[o.size] || STRETCH['15x10.5'], jnOf(o)); },
-    stretchOne(g, prim, o, T, joined) {
+    build(g, prim, o) {
+      const T = STRETCH[o.size] || STRETCH['15x10.5'];
       const { L, sx, sz, H, peaks } = T, Wd = T.W, PEAK = T.peak;
-      const closed = closedFor(o, joined);
-      const { geo, hem } = stretchGeo(L, Wd, sx, sz, H, PEAK, peaks, closed, T.R, joined);
+      const closed = closedOf(o);
+      const { geo, hem } = stretchGeo(L, Wd, sx, sz, H, PEAK, peaks, closed, T.R);
       g.add(new THREE.Mesh(geo, prim), new THREE.LineLoop(hem, MAT.hem));
       const near = (a, b) => Math.abs(a - b) < 1e-6;
+      const perim = [];
+      for (let x = -L / 2; x <= L / 2 + 1e-6; x += sx) perim.push([x, -Wd / 2], [x, Wd / 2]);
+      for (let z = -Wd / 2 + sz; z < Wd / 2 - 1e-6; z += sz) perim.push([-L / 2, z], [L / 2, z]);
       const wood = [], ropes = [];
-      for (const [x, z] of perimOf(T)) {
+      for (const [x, z] of perim) {
         if (closed.some(([cx, cz]) => near(x, cx * L / 2) && near(z, cz * Wd / 2))) continue;
-        const onXm = near(x, -L / 2), onXp = near(x, L / 2), onZm = near(z, -Wd / 2), onZp = near(z, Wd / 2);
-        // On a joint: no perimeter poles; the poles at its two ends are drawn once, by the tent marked *.
-        if (!poleKept(T, joined, x, z)) continue;
         wood.push(bambooPole(x, z, H + 0.25));
-        let dx = onXm ? -1 : onXp ? 1 : 0, dz = onZm ? -1 : onZp ? 1 : 0;
-        const hits = jointHits(T, joined, x, z).map(([k]) => k);                      // never guy a pole into the next tent
-        if (hits.includes('xm') || hits.includes('xp')) dx = 0;
-        if (hits.includes('zm') || hits.includes('zp')) dz = 0;
-        if (!dx && !dz) continue;
+        const dx = near(x, -L / 2) ? -1 : near(x, L / 2) ? 1 : 0, dz = near(z, -Wd / 2) ? -1 : near(z, Wd / 2) ? 1 : 0;
         if (o.guys) ropes.push(stick([x, H + 0.1, z], [x + dx * 3, 0, z + dz * 3], 0.008, 0.008, 5));
       }
       for (const [x, z] of peaks) wood.push(bambooPole(x, z, PEAK + 0.3));
       g.add(new THREE.Mesh(mergeLocal(wood), MAT.bamboo));
       if (ropes.length) g.add(new THREE.Mesh(mergeLocal(ropes), MAT.rope));
-      if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed, joined), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed, joined); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
+      if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
       if (o.twinkle) { const tw = twinkleRun(T, o); if (tw) addTwinkle(g, tw); }
-      const at = (k, v) => (k[0] === 'x' ? [k[1] === 'm' ? -L / 2 : L / 2, -Wd / 2 + v] : [-L / 2 + v, k[1] === 'm' ? -Wd / 2 : Wd / 2]);
-      for (const k of SIDES) if (joined[k + '*']) for (const [s0, s1] of joined[k + '@']) addJoint(g, prim, at(k, s0), at(k, s1), H);
     },
     quote: (o) => {
-      const jt = joinTotals(o);
-      const q = { ['tente_stretch_' + (STRETCH[o.size] ? o.size : '15x10.5')]: 1, mousqueton_jumelage: jt.carab, gouttiere_m: jt.gutter };
-      if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette', t = stretchLights(o);
-        if (gg) { q.guinguette_m = t.buy; q.ampoules_guinguette = t.bulbs; q.depart_guinguette = t.feeds; } else { q.guirlande_m = t.buy; q.guirlande_brins = t.n; }
+      const q = { ['tente_stretch_' + (STRETCH[o.size] ? o.size : '15x10.5')]: 1 };
+      if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette', t = lightTotals(STRETCH[o.size] || STRETCH['15x10.5'], gg ? 'guinguette' : 'fine', closedOf(o));
+        if (gg) { q.guinguette_m = t.buy; q.ampoules_guinguette = t.bulbs; q.depart_guinguette = 1; } else { q.guirlande_m = t.buy; q.guirlande_brins = t.n; }
         if (t.cable) q.cable_porteur_m = Math.ceil(t.cable); }
       const tw = o.twinkle ? twinkleRun(STRETCH[o.size] || STRETCH['15x10.5'], o) : null;
       if (tw) { q.scintillant_m = tw.buy; q.scintillant_brins = tw.n; if (!q.cable_porteur_m) q.cable_porteur_m = Math.ceil(tw.bay); }
@@ -3092,7 +2990,7 @@ const ITEM_DEFS = [
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
-  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
+  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
@@ -3174,7 +3072,7 @@ selBox.visible = false;
 scene.add(selBox);
 
 const tc = new TransformControls(camera, renderer.domElement);
-tc.addEventListener('dragging-changed', (e) => { orbit.enabled = !e.value; if (!e.value) { autoJoin(tc.object); commit(); } });
+tc.addEventListener('dragging-changed', (e) => { orbit.enabled = !e.value; if (!e.value) commit(); });
 tc.addEventListener('objectChange', () => { keepAboveFloor(tc.object); fillInspector(); });
 scene.add(tc);
 
@@ -3468,88 +3366,7 @@ function rebuild(g, patch) {
 /* ---------- History & persistence ---------- */
 let hist = [], hi = -1;
 function save(s) { try { localStorage.setItem(STORE, s); } catch (e) {} }
-/* Jumelage automatique: when a stretch tent is dropped with one of its sides facing a side of the same length of
-   another stretch tent (parallel, less than 1,5 m apart), it snaps onto it and the two hook together. Every commit
-   re-checks all tents, so a tent moved away is unhooked. */
-const _jv = new THREE.Vector3();
-function tentSides(g) {
-  const T = STRETCH[g.userData.opts.size] || STRETCH['15x10.5'], L = T.L, W = T.W;
-  g.updateMatrixWorld(true);
-  const w = (x, z) => { _jv.set(x, 0, z).applyMatrix4(g.matrixWorld); return [_jv.x, _jv.z]; };
-  const c = w(0, 0);
-  return Object.entries({ zm: [[-L / 2, -W / 2], [L / 2, -W / 2]], zp: [[-L / 2, W / 2], [L / 2, W / 2]], xm: [[-L / 2, -W / 2], [-L / 2, W / 2]], xp: [[L / 2, -W / 2], [L / 2, W / 2]] })
-    .map(([k, [a, b]]) => { const A = w(...a), B = w(...b), m = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2], len = Math.hypot(B[0] - A[0], B[1] - A[1]);
-      const n = [m[0] - c[0], m[1] - c[1]], nl = Math.hypot(...n); return { k, A, B, m, len, H: T.H, d: [(B[0] - A[0]) / len, (B[1] - A[1]) / len], n: [n[0] / nl, n[1] / nl] }; });
-}
-const dot2 = (p, q) => p[0] * q[0] + p[1] * q[1];
-/* Two facing sides of two tents: the shorter one (a) lies along the longer one (b). sa = where a starts along b,
-   gap = distance between the two hems, over = how far a sticks out past the ends of b. */
-function sidePair(x, y) {
-  const [a, b] = x.len <= y.len + 1e-6 ? [x, y] : [y, x];
-  if (a.H !== b.H || dot2(a.n, b.n) > -0.999) return null;                       // same hem height, facing each other
-  const t0 = dot2([a.A[0] - b.A[0], a.A[1] - b.A[1]], b.d), t1 = dot2([a.B[0] - b.A[0], a.B[1] - b.A[1]], b.d), sa = Math.min(t0, t1);
-  const gap = dot2([a.m[0] - b.m[0], a.m[1] - b.m[1]], b.n), over = Math.max(0, -sa) + Math.max(0, sa + a.len - b.len);
-  return { a, b, sa, gap, over };
-}
-function findJoins(tents, tol, only = null) {
-  const out = [];
-  for (let i = 0; i < tents.length; i++) for (let j = i + 1; j < tents.length; j++) {
-    if (only && tents[i] !== only && tents[j] !== only) continue;
-    for (const x of tentSides(tents[i])) for (const y of tentSides(tents[j])) {
-      const p = sidePair(x, y);
-      if (!p || Math.abs(p.gap) > tol || p.over > (tol > 0.1 ? p.a.len / 2 : 0.05)) continue;
-      const [ga, gb] = p.a === x ? [tents[i], tents[j]] : [tents[j], tents[i]];
-      out.push({ ...p, ga, gb, first: tents[i], dist: Math.abs(p.gap) + p.over });
-    }
-  }
-  return out.sort((p, q) => p.dist - q.dist);
-}
-// Where a shorter side may start along a longer one: on the 70 cm eyelet grid, or flush with the far corner.
-function snapStart(sa, la, lb) {
-  if (lb - la < 0.05) return 0;
-  const c = [...Array.from({ length: Math.floor((lb - la) / EYELET + 1e-6) + 1 }, (_, i) => i * EYELET), lb - la];
-  return c.reduce((best, v) => (Math.abs(v - sa) < Math.abs(best - sa) ? v : best), c[0]);
-}
-function autoJoin(moved = null) {
-  const tents = objects.filter((o) => o.userData.kind === 'stretch' && o.visible);
-  let snapped = null;
-  if (moved && tents.includes(moved) && !moved.userData.locked) {
-    const best = findJoins(tents, JOIN_SNAP, moved)[0];
-    if (best) {
-      const { a, b, sa, gap } = best, s2 = snapStart(sa, a.len, b.len);
-      // move a onto b: close the gap and slide along b to the chosen eyelet
-      const v = [b.d[0] * (s2 - sa) - b.n[0] * gap, b.d[1] * (s2 - sa) - b.n[1] * gap], sg = best.ga === moved ? 1 : -1;
-      moved.position.x += sg * v[0]; moved.position.z += sg * v[1];
-      snapped = { len: a.len };
-    }
-  }
-  const jn = new Map(tents.map((t) => [t, []]));
-  const r2 = (v) => Math.round(v * 100) / 100;
-  for (const { a, b, ga, gb, sa, first } of findJoins(tents, 0.05)) {
-    const full = Math.abs(a.len - b.len) < 0.05;
-    // b's interval in its own side coordinates (measured from b's first corner, A)
-    const s0 = r2(Math.max(0, sa)), s1 = r2(Math.min(b.len, sa + a.len));
-    if (jn.get(ga).some((t) => t.startsWith(a.k))) continue;
-    if (jn.get(gb).some((t) => t.startsWith(b.k) && (full || !t.includes('@')))) continue;
-    // the gutter and the poles at the joint ends go with the tent whose whole side is joined (the first one if equal)
-    const starA = !full || ga === first;
-    jn.get(ga).push(a.k + (starA ? '*' : ''));
-    jn.get(gb).push(b.k + (starA ? '' : '*') + (full ? '' : `@${s0}-${s1}`));
-  }
-  for (const t of tents) {
-    const v = jn.get(t).sort().join(',');
-    if ((t.userData.opts.jn || '') === v) continue;
-    const d = describe(t), idx = objects.indexOf(t), wasSel = selected === t;
-    d.opts = { ...d.opts, jn: v };
-    removeObject(t);
-    const n = addObject(d.kind, d);
-    objects.splice(objects.indexOf(n), 1); objects.splice(idx, 0, n);
-    if (wasSel) select(n, false);
-  }
-  if (snapped) toast(`Tentes jumelées : ${carabOf(snapped.len)} mousquetons sur ${fmtM(Math.round(snapped.len * 100) / 100)} m (1 tous les 70 cm), gouttière posée`);
-}
 function commit() {
-  autoJoin();
   const s = JSON.stringify(serialize());
   if (hist[hi] === s) return;
   hist = hist.slice(0, hi + 1);
@@ -3873,7 +3690,7 @@ function renderOptions() {
   const wrap = $('#optRows');
   wrap.replaceChildren();
   for (const [k, d] of Object.entries(defs)) {
-    if (d.hidden || (d.when && !d.when(g.userData.opts))) continue;
+    if (d.when && !d.when(g.userData.opts)) continue;
     const val = g.userData.opts[k];
     const row = document.createElement('label');
     row.className = 'row';
@@ -3895,7 +3712,7 @@ function renderOptions() {
     row.append(span, input, document.createElement('span'));
     wrap.append(row);
   }
-  $('#optWrap').hidden = !Object.values(defs).some((d) => !d.hidden);
+  $('#optWrap').hidden = !Object.keys(defs).length;
 }
 
 // Heading on the floor, read from the quaternion (Euler y alone is ambiguous past ±90°).
@@ -3948,7 +3765,7 @@ function fillInspector() {
 }
 
 $('#inspForm').addEventListener('submit', (e) => e.preventDefault());
-$('#inspForm').addEventListener('change', (e) => { if (e.target.closest('#vecs')) autoJoin(selected); if (!e.target.id.startsWith('opt-')) commit(); });
+$('#inspForm').addEventListener('change', (e) => { if (!e.target.id.startsWith('opt-')) commit(); });
 $('#vecs').addEventListener('input', (e) => {
   const t = e.target;
   if (!selected || selected.userData.locked || t.value === '') return;
