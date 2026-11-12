@@ -1,7 +1,7 @@
 // Oravis Plan Événement 3D — offline support.
 // The app shell is cached on install; libraries and fonts from the CDNs are cached the first time they load,
 // so the app keeps working without a connection. Bump VERSION on every update to refresh the cache.
-const VERSION = 'oravis-3d-20261112145617';
+const VERSION = 'oravis-3d-20261112155035';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
