@@ -1,0 +1,17 @@
+{
+  "name": "Oravis Plan Événement 3D",
+  "short_name": "Oravis 3D",
+  "description": "Plans 3D d'événements pour les clients Oravis : tentes, mobilier, guirlandes, récap du matériel.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e8edf3",
+  "theme_color": "#3b5bfd",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
