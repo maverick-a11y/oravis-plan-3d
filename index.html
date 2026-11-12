@@ -1704,11 +1704,55 @@ function cyl(g, rt, rb, h, mat, x = 0, y = 0, z = 0, seg = 24) {
 function sph(g, r, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), mat); m.position.set(x, y, z); g.add(m); return m;
 }
+/* Chaise fer blanc vieilli: 47 × 47 cm, h 87 cm, seat 47 cm with its white cushion. Folding frame seen as an X from the
+   side, back with a scrolled crest, finials and vertical bars, scrolled stretcher low at the front. Faces +z. */
+// woven top of the rattan guéridon: the cane weave at a readable scale, lighter natural tone
+MAT.rattanTop = fixed(new THREE.MeshStandardMaterial({ map: (() => { const t = rattanTex.clone(); t.repeat.set(2.2, 2.2); t.needsUpdate = true; return t; })(), color: '#f3e2c0', roughness: 0.85 }));
+MAT.ironWhite = fixed(new THREE.MeshStandardMaterial({ color: '#e9e3d5', metalness: 0.35, roughness: 0.6 }));
+MAT.metalWhite = fixed(new THREE.MeshStandardMaterial({ color: '#f1efe9', metalness: 0.3, roughness: 0.45 }));
+MAT.cushionWhite = fixed(new THREE.MeshStandardMaterial({ color: '#f3f1ea', roughness: 0.95 }));
+const curl = (r, x, y, z, arc = PI * 1.6, rz = 0) => new THREE.TorusGeometry(r, 0.005, 5, 16, arc).rotateZ(rz).translate(x, y, z);
+const IRON_CHAIR = merge((() => {
+  const R = 0.008, S = 0.43, bz = (y) => -0.2 - 0.06 * (y - S) / 0.44, p = [];
+  for (const sx of [-0.21, 0.21]) {
+    p.push(stick([sx, 0, 0.22], [sx, S, -0.19], R), stick([sx, 0, -0.21], [sx, S, 0.2], R));   // X legs
+    p.push(new THREE.SphereGeometry(0.014, 8, 6).translate(sx, 0.012, 0.22), new THREE.SphereGeometry(0.014, 8, 6).translate(sx, 0.012, -0.21));
+    p.push(stick([sx, S, -0.2], [sx, 0.84, bz(0.84)], R));                                     // back uprights
+    p.push(new THREE.SphereGeometry(0.016, 10, 8).translate(sx, 0.86, bz(0.86)), new THREE.ConeGeometry(0.01, 0.03, 8).translate(sx, 0.885, bz(0.88)));
+  }
+  for (const [a, b] of [[[-0.21, S, 0.2], [0.21, S, 0.2]], [[-0.21, S, -0.2], [0.21, S, -0.2]], [[-0.21, S, 0.2], [-0.21, S, -0.2]], [[0.21, S, 0.2], [0.21, S, -0.2]]]) p.push(stick(a, b, R));
+  for (const y of [0.52, 0.76]) p.push(stick([-0.21, y, bz(y)], [0.21, y, bz(y)], 0.007));   // back rails
+  for (let i = 0; i < 6; i++) { const x = -0.125 + i * 0.05; p.push(stick([x, 0.52, bz(0.52)], [x, 0.7, bz(0.7)], 0.004)); p.push(curl(0.025, x + 0.025, 0.7, bz(0.7), PI)); }
+  p.push(curl(0.08, 0, 0.765, bz(0.77), PI), curl(0.035, -0.12, 0.8, bz(0.8)), curl(0.035, 0.12, 0.8, bz(0.8), PI * 1.6, PI));   // crest scrolls
+  p.push(curl(0.035, -0.16, 0.57, bz(0.57)), curl(0.035, 0.16, 0.57, bz(0.57), PI * 1.6, PI));
+  const zf = 0.22 - 0.41 * (0.1 / S), zb = -0.21 + 0.41 * (0.1 / S);
+  p.push(stick([-0.21, 0.1, zf], [0.21, 0.1, zf], 0.006), curl(0.03, -0.07, 0.13, zf), curl(0.03, 0.07, 0.13, zf, PI * 1.6, PI));   // scrolled front stretcher
+  p.push(stick([-0.21, 0.1, zb], [0.21, 0.1, zb], 0.006));
+  return p;
+})());
+const IRON_CUSHION = shared(roundedSlab(0.45, 0.43, 0.05, 0.045, 0.432));
+/* Chaise pliante bistrot blanche (slatted folding café chair, white metal, white cushion), ≈ 41 × 48 cm, h 82 cm.
+   Rear legs run up into the back with three curved slats; front legs cross under the seat. Faces +z. */
+const FOLD_CHAIR = merge((() => {
+  const S = 0.45, p = [], bz = (y) => -0.19 - 0.08 * (y - S) / 0.37;
+  for (const sx of [-0.195, 0.195]) {
+    p.push(stick([sx, 0, -0.1], [sx, S, -0.19], 0.009), stick([sx, S, -0.19], [sx, 0.82, bz(0.82)], 0.009));   // rear leg + back post
+    p.push(stick([sx * 0.92, 0, 0.24], [sx * 0.92, S - 0.02, -0.16], 0.008));                                // front leg, crossing under the seat
+    p.push(stick([sx, S, 0.22], [sx, S, -0.19], 0.008));                                                     // seat side rail
+  }
+  for (let i = 0; i < 6; i++) p.push(new THREE.BoxGeometry(0.4, 0.01, 0.05).translate(0, S + 0.005, 0.18 - i * 0.068));   // seat slats
+  for (const y of [0.62, 0.7, 0.78]) p.push(new THREE.BoxGeometry(0.4, 0.05, 0.01).rotateX(-0.2).translate(0, y, bz(y)));   // back slats
+  p.push(stick([-0.18, 0.12, 0.2], [0.18, 0.12, 0.2], 0.006), stick([-0.195, 0.14, -0.11], [0.195, 0.14, -0.11], 0.006));
+  return p;
+})());
+const FOLD_CUSHION = shared(roundedSlab(0.4, 0.39, 0.05, 0.04, 0.462));
 function chair(g, mat, x = 0, z = 0, ry = 0, model = 'bistrot', cushion = false) {
   const c = new THREE.Group();
   c.position.set(x, 0, z); c.rotation.y = ry;
   if (model === 'pliante') c.add(new THREE.Mesh(CHAIR_BODY, mat), new THREE.Mesh(CHAIR_LEGS, MAT.metal));
   else if (model === 'medaillon') c.add(new THREE.Mesh(MED_WOOD, mat), new THREE.Mesh(MED_CANE, MAT.caneBack), new THREE.Mesh(MED_SEAT, MAT.linen));
+  else if (model === 'fer') c.add(new THREE.Mesh(IRON_CHAIR, MAT.ironWhite), new THREE.Mesh(IRON_CUSHION, MAT.cushionWhite));
+  else if (model === 'bistrotPliante') c.add(new THREE.Mesh(FOLD_CHAIR, MAT.metalWhite), new THREE.Mesh(FOLD_CUSHION, MAT.cushionWhite));
   else {
     c.add(new THREE.Mesh(CROSS_WOOD, mat), new THREE.Mesh(CROSS_RATTAN, MAT.rattan));
     if (cushion) c.add(new THREE.Mesh(CROSS_CUSHION, MAT.cushion));
@@ -1725,7 +1769,7 @@ const seatsOf = (q) => Object.entries(q).reduce((s, [k, v]) => s + (k.startsWith
 /* ---------- Catalogue (dimensions in metres) ---------- */
 const SEE = { label: 'Toile transparente', type: 'bool', def: false };
 const CHAIR_COLOR = { label: 'Couleur des chaises', type: 'color', def: '#c4975c' };
-const CHAIR_MODEL = { label: 'Modèle de chaise', type: 'select', values: ['bistrot', 'medaillon', 'pliante'], names: { bistrot: 'Bistrot bois', medaillon: 'Médaillon', pliante: 'Pliante' }, def: 'bistrot' };
+const CHAIR_MODEL = { label: 'Modèle de chaise', type: 'select', values: ['bistrot', 'medaillon', 'fer', 'bistrotPliante', 'pliante'], names: { bistrot: 'Bistrot bois', medaillon: 'Médaillon', fer: 'Fer blanc vieilli', bistrotPliante: 'Pliante bistrot blanche', pliante: 'Pliante' }, def: 'bistrot' };
 /* Carrousel Lafayette (1893) — ORAVIS rental: Ø 3,5 m, h 3 m, 11 places.
    Fixed red base with gold swags; everything above it (deck, figures, poles, column, canopy, roof) turns,
    and the three jumping horses ride up and down. Figures face the direction of travel. */
@@ -2397,7 +2441,9 @@ const KINDS = {
       if (o.cloth) cyl(g, r + 0.02, r + 0.1, 0.76, prim, 0, 0.38, 0, 48);
       else { cyl(g, r, r, 0.04, prim, 0, 0.74, 0, 48); cyl(g, 0.05, 0.05, 0.72, MAT.metal, 0, 0.36, 0, 12); cyl(g, 0.32, 0.32, 0.03, MAT.metal, 0, 0.015, 0); }
       const cm = chairMat(o.chairColor);
-      for (let i = 0; i < o.seats; i++) { const a = (i / o.seats) * PI * 2; chair(g, cm, (r + 0.37) * Math.sin(a), (r + 0.37) * Math.cos(a), a + PI, o.chairModel); }
+      // chairs pulled in as when someone sits (seat front under the top; with a floor-length cloth they stop at the cloth)
+      const rc = r + (o.cloth ? 0.3 : 0.16);
+      for (let i = 0; i < o.seats; i++) { const a = (i / o.seats) * PI * 2; chair(g, cm, rc * Math.sin(a), rc * Math.cos(a), a + PI, o.chairModel); }
     },
     quote: (o) => {
       const sfx = o.diam === 150 ? '_150' : '';
@@ -2414,8 +2460,9 @@ const KINDS = {
         for (const [x, z] of [[-0.84, -0.32], [0.84, -0.32], [-0.84, 0.32], [0.84, 0.32]]) cyl(g, 0.02, 0.02, 0.72, MAT.metal, x, 0.36, z, 8);
       }
       const cm = chairMat(o.chairColor);
-      for (const x of ({ 4: [-0.45, 0.45], 6: [-0.6, 0, 0.6], 8: [-0.6, 0, 0.6] }[o.seats] || [])) { chair(g, cm, x, 0.74, PI, o.chairModel); chair(g, cm, x, -0.74, 0, o.chairModel); }
-      if (o.seats === 8) { chair(g, cm, 1.24, 0, -PI / 2, o.chairModel); chair(g, cm, -1.24, 0, PI / 2, o.chairModel); }
+      const dz = o.cloth ? 0.69 : 0.52, dx = o.cloth ? 1.21 : 1.04;   // chairs pulled in under the top (stopping at a floor-length cloth)
+      for (const x of ({ 4: [-0.45, 0.45], 6: [-0.6, 0, 0.6], 8: [-0.6, 0, 0.6] }[o.seats] || [])) { chair(g, cm, x, dz, PI, o.chairModel); chair(g, cm, x, -dz, 0, o.chairModel); }
+      if (o.seats === 8) { chair(g, cm, dx, 0, -PI / 2, o.chairModel); chair(g, cm, -dx, 0, PI / 2, o.chairModel); }
     },
     quote: (o) => ({ table_rect: 1, [chairKey(o.chairModel)]: o.seats, nappe_rect: o.cloth ? 1 : 0 }),
   },
@@ -2458,8 +2505,11 @@ const KINDS = {
       // 3 chairs per table on each side; in a banquet with junction seats, one more right on every join
       const xs = side ? Array.from({ length: n }, (_, t) => (o.junction && n > 1 ? [-0.55, 0, 0.55] : [-0.62, 0, 0.62]).map((x) => -LT / 2 + L / 2 + t * L + x)).flat() : [];
       if (side && o.junction) for (let t = 1; t < n; t++) xs.push(-LT / 2 + t * L);
-      for (const x of xs) { chair(g, cm, x, W / 2 + 0.33, PI, o.chairModel); chair(g, cm, x, -W / 2 - 0.33, 0, o.chairModel); }
-      if (heads) { chair(g, cm, LT / 2 + 0.33, 0, -PI / 2, o.chairModel); chair(g, cm, -LT / 2 - 0.33, 0, PI / 2, o.chairModel); }
+      // Chairs pulled in as when someone sits: the seat front goes ~12 cm under the top (true footprint for the
+      // tent size). A chair on a join stops just clear of the two leg frames there.
+      const joinX = new Set(Array.from({ length: n - 1 }, (_, t) => (-LT / 2 + (t + 1) * L).toFixed(3)));
+      for (const x of xs) { const d = W / 2 + (o.cloth || joinX.has(x.toFixed(3)) ? 0.28 : 0.14); chair(g, cm, x, d, PI, o.chairModel); chair(g, cm, x, -d, 0, o.chairModel); }
+      if (heads) { const e = LT / 2 + (o.cloth ? 0.28 : 0.14); chair(g, cm, e, 0, -PI / 2, o.chairModel); chair(g, cm, -e, 0, PI / 2, o.chairModel); }
     },
     quote: (o) => { const { side, heads } = pvcSeats(o); return { table_pvc: o.tables || 1, [chairKey(o.chairModel)]: 2 * side + heads, nappe_pvc: o.cloth ? o.tables || 1 : 0 }; },
   },
@@ -2484,7 +2534,7 @@ const KINDS = {
           for (const t of [t0 + dt, t1 - dt]) for (const rr of [r + 0.12, R - 0.12]) cyl(g, 0.018, 0.018, H - 0.03, MAT.metal, C[0] + rr * Math.cos(t), (H - 0.03) / 2, C[1] + rr * Math.sin(t), 8);
         }
         if (!o.chairs) continue;
-        for (const [n, rad, out] of [[5, R + 0.36, true], [2, r - 0.33, false]]) for (let i = 0; i < n; i++) {
+        for (const [n, rad, out] of [[5, R + (o.cloth ? 0.3 : 0.16), true], [2, r - (o.cloth ? 0.3 : 0.16), false]]) for (let i = 0; i < n; i++) {
           const t = t0 + ((t1 - t0) * (i + 0.5)) / n;
           const x = C[0] + rad * Math.cos(t), z = C[1] + rad * Math.sin(t);
           const dx = out ? C[0] - x : x - C[0], dz = out ? C[1] - z : z - C[1];
@@ -2511,6 +2561,50 @@ const KINDS = {
     opts: { model: { label: 'Modèle', type: 'select', values: ['bistrot', 'industriel'], names: { bistrot: 'Bistrot rotin tressé', industriel: 'Industriel fer et bois' }, def: 'bistrot' } },
     build(g, prim, o) { (o.model === 'industriel' ? stoolIndus : stoolBistro)(g); },
     quote: (o) => ({ ['tabouret_' + (o.model === 'industriel' ? 'industriel' : 'bistrot')]: 1 }),
+  },
+  troundWood: {
+    label: 'Table ronde bois massif', glyph: '◉', color: '#b07b48', colorLabel: 'Bois', mat: { roughness: 0.62 },
+    opts: { seats: { label: 'Chaises', type: 'select', values: [0, 6, 8, 10, 12], def: 8 }, chairModel: CHAIR_MODEL, chairColor: CHAIR_COLOR },
+    build(g, prim, o) {
+      // Solid wood round table, Ø 168 cm, top at 76 cm like the other tables: thick top, four square legs splayed
+      // outward (set on the diagonals), joined under the top by two crossed beams.
+      const R = 0.84, H = 0.76, T = 0.05, wood = [];
+      wood.push(new THREE.CylinderGeometry(R, R - 0.008, T, 72).translate(0, H - T / 2, 0));
+      for (let k = 0; k < 4; k++) {
+        const a = PI / 4 + (k * PI) / 2, c = Math.cos(a), sn = Math.sin(a);
+        wood.push(stick([0.62 * c, 0, 0.62 * sn], [0.36 * c, H - T, 0.36 * sn], 0.065, 0.065, 4));
+      }
+      for (const a of [PI / 4, -PI / 4]) wood.push(new THREE.BoxGeometry(0.86, 0.08, 0.06).rotateY(a).translate(0, H - T - 0.04, 0));
+      g.add(new THREE.Mesh(mergeLocal(wood), prim));
+      const cm = chairMat(o.chairColor), rc = R + 0.16;
+      for (let i = 0; i < o.seats; i++) { const a = (i / o.seats) * PI * 2; chair(g, cm, rc * Math.sin(a), rc * Math.cos(a), a + PI, o.chairModel); }
+    },
+    quote: (o) => ({ table_ronde_bois: 1, [chairKey(o.chairModel)]: o.seats }),
+  },
+  gueridon: {
+    label: 'Guéridon rotin', glyph: '◉', color: '#ffffff', noColor: true,
+    opts: { seats: { label: 'Chaises', type: 'select', values: [0, 2, 3, 4], names: { 0: 'Aucune' }, def: 3 }, chairModel: CHAIR_MODEL, chairColor: CHAIR_COLOR },
+    build(g, prim, o) {
+      // Guéridon en rotin naturel, Ø 80 cm, h 75 cm: woven round top with a wrapped rim, four rattan legs set in a
+      // square, bentwood arches under the top, a cross stretcher low down and binding wraps at the joints.
+      const R = 0.4, H = 0.75, L = 0.25, cane = [], wraps = [];
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.02, R - 0.02, 0.02, 48), MAT.rattanTop); top.position.y = H - 0.012; g.add(top);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(R - 0.02, 0.022, 10, 64).rotateX(PI / 2), MAT.rattan); rim.position.y = H - 0.022; g.add(rim);
+      const legs = [[L, L], [-L, L], [-L, -L], [L, -L]];
+      for (const [x, z] of legs) {
+        cane.push(stick([x * 1.12, 0, z * 1.12], [x, H - 0.03, z], 0.018, 0.016, 10));
+        // arch from the leg up and out to the underside of the top
+        const a = Math.atan2(z, x), c = new THREE.CatmullRomCurve3([[x * 1.06, 0.38, z * 1.06], [Math.cos(a) * 0.3, 0.6, Math.sin(a) * 0.3], [Math.cos(a) * 0.36, H - 0.05, Math.sin(a) * 0.36]].map((p) => new THREE.Vector3(...p)));
+        cane.push(new THREE.TubeGeometry(c, 16, 0.011, 6, false));
+        for (const y of [0.15, H - 0.06]) wraps.push(new THREE.CylinderGeometry(0.022, 0.022, 0.035, 10).translate(x * (1.12 - 0.12 * y / H), y, z * (1.12 - 0.12 * y / H)));
+      }
+      cane.push(new THREE.TorusGeometry(0.27, 0.011, 6, 40).rotateX(PI / 2).translate(0, H - 0.06, 0));   // ring under the top
+      for (const [p, q] of [[legs[0], legs[2]], [legs[1], legs[3]]]) cane.push(stick([p[0] * 1.1, 0.15, p[1] * 1.1], [q[0] * 1.1, 0.15, q[1] * 1.1], 0.011, 0.011, 8));
+      g.add(new THREE.Mesh(mergeLocal(cane), MAT.cane), new THREE.Mesh(mergeLocal(wraps), MAT.teak));
+      const cm = chairMat(o.chairColor), rc = R + 0.17;
+      for (let i = 0; i < o.seats; i++) { const a = (i / o.seats) * PI * 2 + PI / 4; chair(g, cm, rc * Math.sin(a), rc * Math.cos(a), a + PI, o.chairModel); }
+    },
+    quote: (o) => ({ gueridon_rotin: 1, [chairKey(o.chairModel)]: o.seats }),
   },
   standing: {
     label: 'Mange-debout', glyph: '•', color: '#f6f3ec', colorLabel: 'Housse / plateau',
@@ -2989,6 +3083,10 @@ const CATALOG = [
     { kind: 'tpvc', label: 'Table PVC 200 × 90', sub: '2,00 × 0,90 m · plateau blanc · sans chaises', opts: { chairs: 'aucune' } },
     { kind: 'tpvc', label: 'Banquet PVC 4 tables (8 m)', sub: '8 × 0,90 m · 3 par table et par côté + 1 à chaque jonction · 30 places', opts: { tables: 4 } },
     { kind: 'trect', label: 'Table buffet', sub: '1,80 × 0,76 m · nappe', opts: { seats: 0, cloth: true } },
+    { kind: 'troundWood', label: 'Table ronde bois Ø 168 + 8 pliantes', sub: 'bois massif · h 76 cm · chaises pliantes blanches', opts: { chairModel: 'bistrotPliante' } },
+    { kind: 'troundWood', label: 'Table ronde bois massif Ø 168', sub: 'bois massif · 4 pieds obliques · h 76 cm', opts: { seats: 0 } },
+    { kind: 'gueridon', label: 'Guéridon rotin + 3 chaises bistrot', sub: 'Ø 80 cm · h 75 cm · rotin naturel' },
+    { kind: 'gueridon', label: 'Guéridon rotin Ø 80', sub: 'Ø 80 cm · h 75 cm · plateau tressé', opts: { seats: 0 } },
     { kind: 'coffeeBamboo', label: 'Table basse bambou ronde', sub: 'Ø 1 m · h 35 cm · plateau à lattes' },
     { kind: 'standing', label: 'Mange-debout', sub: 'Ø 0,60 · h 1,10 m · housse' },
     { kind: 'standingIron', label: 'Mange-debout fer forgé', sub: 'plateau Ø 50 cm · h 110 cm' },
@@ -3000,6 +3098,9 @@ const CATALOG = [
     { kind: 'stool', label: 'Tabouret bistrot', sub: 'Ø 38 cm · h 75 cm · assise tressée' },
     { kind: 'stool', label: 'Tabouret industriel', sub: 'Ø 33 cm · h 70 cm · fer et bois', opts: { model: 'industriel' } },
     { kind: 'chair', label: 'Chaise médaillon', sub: '49 × 45 cm · h 97 cm · cannage, lin écru', color: '#b39470', opts: { model: 'medaillon' } },
+    { kind: 'chair', label: 'Chaise fer blanc vieilli', sub: '47 × 47 cm · h 87 cm · assise 47 cm · coussin blanc', opts: { model: 'fer' } },
+    { kind: 'chair', label: 'Chaise pliante bistrot blanche', sub: 'métal blanc à lattes · coussin blanc', opts: { model: 'bistrotPliante' } },
+    { kind: 'chairrow', label: 'Rangée de 8 pliantes blanches', sub: 'cérémonie · chaises bistrot pliantes', opts: { model: 'bistrotPliante' } },
     { kind: 'chair', label: 'Chaise pliante', sub: '44 × 44 cm · h 92 cm', color: '#ece6da', opts: { model: 'pliante' } },
     { kind: 'chairrow', label: 'Rangée de 8 bistrot', sub: 'cérémonie · chaises bistrot' },
     { kind: 'chairrow', label: 'Rangée de 8 médaillon', sub: 'cérémonie · chaises médaillon', color: '#b39470', opts: { model: 'medaillon' } },
@@ -3088,7 +3189,7 @@ const CATALOG = [
 ];
 
 const ITEM_DEFS = [
-  ['chaise_bistrot', 'Chaise bistrot'], ['chaise_medaillon', 'Chaise médaillon'], ['chaise', 'Chaise pliante'], ['table_ronde', 'Table ronde Ø 1,80 m'], ['table_ronde_150', 'Table ronde Ø 1,50 m'], ['nappe_ronde', 'Nappe ronde (Ø 1,80 m)'], ['nappe_ronde_150', 'Nappe ronde (Ø 1,50 m)'],
+  ['chaise_bistrot', 'Chaise bistrot'], ['chaise_medaillon', 'Chaise médaillon'], ['chaise_fer', 'Chaise fer blanc vieilli (coussin blanc)'], ['chaise_bistrotPliante', 'Chaise pliante bistrot blanche (coussin blanc)'], ['chaise', 'Chaise pliante'], ['gueridon_rotin', 'Guéridon rotin naturel Ø 80 cm'], ['table_ronde_bois', 'Table ronde bois massif Ø 168 cm'], ['table_ronde', 'Table ronde Ø 1,80 m'], ['table_ronde_150', 'Table ronde Ø 1,50 m'], ['nappe_ronde', 'Nappe ronde (Ø 1,80 m)'], ['nappe_ronde_150', 'Nappe ronde (Ø 1,50 m)'],
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
