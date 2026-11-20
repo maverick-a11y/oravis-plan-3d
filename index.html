@@ -438,7 +438,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
         <button class="btn primary" type="button" id="btnSample">Charger l'exemple (mariage 120 pers.)</button>
       </div>
     </div>
-    <div class="vp-hint">Clic : sélectionner · Glisser : tourner · Clic droit : déplacer la vue · Molette : zoom · Q / D : pivoter · F : cadrer · V : voir sous les toiles · L : verrouiller</div>
+    <div class="vp-hint">Clic : sélectionner · Glisser : tourner · Clic droit : glisser sur le plan · Molette : zoom vers la souris · Flèches : se déplacer · Double-clic au sol : y aller · Q / D : pivoter · F : cadrer · V : voir sous les toiles · L : verrouiller</div>
   </main>
 
   <div class="vp-rot glass" id="rotBar" hidden role="group" aria-label="Faire pivoter l'élément sélectionné">
@@ -579,6 +579,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE = 'planevt.plan.v2';
@@ -1322,14 +1323,17 @@ function serpentineSegments(n, shape) {
 /* Dance floor surfaces, drawn once per (pattern, size, colours) and cached. Square floor of `size` metres,
    aluminium edge ramp drawn around it. */
 const WOOD = { clair: '#c49c68', naturel: '#9a6738', fonce: '#55341d', blanchi: '#cfc4b2', gris: '#827b72' };
+// Sizes in 50 cm steps, shown with a French decimal comma.
+const HALF_M = (a, b) => Array.from({ length: Math.round((b - a) * 2) + 1 }, (_, i) => a + i / 2);
+const HALF_M_NAMES = (a, b) => Object.fromEntries(HALF_M(a, b).map((v) => [v, String(v).replace('.', ',') + ' m']));
 const DANCE_PATTERNS = { damier: 'Damier', uni: 'Uni laqué', parquet: 'Parquet à lames', chevrons: 'Chevrons (point de Hongrie)', panneaux: 'Parquet à panneaux', marbre: 'Marbre blanc', etoiles: 'Piste étoilée' };
 const DANCE_ROUGH = { uni: 0.18, damier: 0.25, marbre: 0.15, etoiles: 0.7, parquet: 0.5, chevrons: 0.5, panneaux: 0.5 };
 const danceCache = new Map();
 function danceTex(o) {
-  const key = JSON.stringify([o.pattern, o.size, o.c1, o.c2, o.wood]);
+  const L = o.length, W = o.width, key = JSON.stringify([o.pattern, L, W, o.c1, o.c2, o.wood]);
   if (danceCache.has(key)) return danceCache.get(key);
-  const S = 1024, px = S / o.size;
-  const c = document.createElement('canvas'); c.width = c.height = S;
+  const px = Math.min(200, 2048 / Math.max(L, W)), SX = Math.round(L * px), SY = Math.round(W * px);   // px = pixels per metre
+  const c = document.createElement('canvas'); c.width = SX; c.height = SY;
   const x = c.getContext('2d');
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -1351,34 +1355,34 @@ function danceTex(o) {
   };
   const p = o.pattern;
   if (p === 'damier' || !DANCE_PATTERNS[p]) {
-    const n = o.size * 2, cs = S / n;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { x.fillStyle = (i + j) % 2 ? o.c1 : o.c2; x.fillRect(i * cs, j * cs, cs + 1, cs + 1); }
+    const nx = Math.round(L * 2), ny = Math.round(W * 2), cs = px / 2;   // 50 cm squares
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) { x.fillStyle = (i + j) % 2 ? o.c1 : o.c2; x.fillRect(i * cs, j * cs, cs + 1, cs + 1); }
   } else if (p === 'uni') {
-    x.fillStyle = o.c1; x.fillRect(0, 0, S, S);
+    x.fillStyle = o.c1; x.fillRect(0, 0, SX, SY);
     x.strokeStyle = 'rgba(127,127,127,0.18)'; x.lineWidth = 1;
-    for (let k = 1; k < o.size; k++) { x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, S); x.moveTo(0, k * px); x.lineTo(S, k * px); x.stroke(); }
+    for (let k = 1; k < L; k++) { x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, SY); x.stroke(); } for (let k = 1; k < W; k++) { x.beginPath(); x.moveTo(0, k * px); x.lineTo(SX, k * px); x.stroke(); }
   } else if (p === 'etoiles') {
-    x.fillStyle = o.c1; x.fillRect(0, 0, S, S);
-    for (let k = 0; k < o.size * o.size * 70; k++) {
+    x.fillStyle = o.c1; x.fillRect(0, 0, SX, SY);
+    for (let k = 0; k < L * W * 70; k++) {
       const r = 0.6 + rnd() * 1.8, a = 0.35 + rnd() * 0.65;
-      x.fillStyle = `rgba(255,255,240,${a})`; x.beginPath(); x.arc(rnd() * S, rnd() * S, r, 0, PI * 2); x.fill();
+      x.fillStyle = `rgba(255,255,240,${a})`; x.beginPath(); x.arc(rnd() * SX, rnd() * SY, r, 0, PI * 2); x.fill();
     }
   } else if (p === 'marbre') {
-    x.fillStyle = '#f2f0ec'; x.fillRect(0, 0, S, S);
-    for (let k = 0; k < 18; k++) {
-      let vx = rnd() * S, vy = rnd() * S, ang = rnd() * PI * 2;
+    x.fillStyle = '#f2f0ec'; x.fillRect(0, 0, SX, SY);
+    for (let k = 0; k < Math.ceil(18 * L * W / 25); k++) {
+      let vx = rnd() * SX, vy = rnd() * SY, ang = rnd() * PI * 2;
       x.strokeStyle = `rgba(110,110,118,${0.12 + rnd() * 0.25})`; x.lineWidth = 0.6 + rnd() * 2.2;
       x.beginPath(); x.moveTo(vx, vy);
       for (let s2 = 0; s2 < 40; s2++) { ang += (rnd() - 0.5) * 0.6; vx += Math.cos(ang) * 14; vy += Math.sin(ang) * 14; x.lineTo(vx, vy); }
       x.stroke();
     }
     x.strokeStyle = 'rgba(150,150,150,0.25)'; x.lineWidth = 1;
-    for (let k = 1; k < o.size; k++) { x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, S); x.moveTo(0, k * px); x.lineTo(S, k * px); x.stroke(); }
+    for (let k = 1; k < L; k++) { x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, SY); x.stroke(); } for (let k = 1; k < W; k++) { x.beginPath(); x.moveTo(0, k * px); x.lineTo(SX, k * px); x.stroke(); }
   } else if (p === 'parquet') {
     const w = 0.14 * px;
-    for (let y = 0; y < S; y += w) {
+    for (let y = 0; y < SY; y += w) {
       let xx = -rnd() * 1.5 * px;
-      while (xx < S) {
+      while (xx < SX) {
         const L = (0.9 + 1.2 * rnd()) * px;
         plank([[xx, y], [xx + L, y], [xx + L, y + w], [xx, y + w]], tone((rnd() - 0.5) * 0.12));
         grain(xx, y, L, w, true);
@@ -1387,20 +1391,20 @@ function danceTex(o) {
     }
   } else if (p === 'chevrons') {
     const cw = 0.45 * px, t = 0.11 * px;
-    for (let k = 0; k * cw < S; k++) {
+    for (let k = 0; k * cw < SX; k++) {
       const d = k % 2 ? 1 : -1, x0 = k * cw;
-      for (let y = -cw; y < S + cw; y += t) plank([[x0, y], [x0 + cw, y + d * cw], [x0 + cw, y + d * cw + t], [x0, y + t]], tone((rnd() - 0.5) * 0.14));
+      for (let y = -cw; y < SY + cw; y += t) plank([[x0, y], [x0 + cw, y + d * cw], [x0 + cw, y + d * cw + t], [x0, y + t]], tone((rnd() - 0.5) * 0.14));
     }
   } else if (p === 'panneaux') {
-    const ts = 0.5 * px, n = Math.ceil(S / ts), w = ts / 4;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) for (let k = 0; k < 4; k++) {
+    const ts = 0.5 * px, nx = Math.ceil(SX / ts), ny = Math.ceil(SY / ts), w = ts / 4;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) for (let k = 0; k < 4; k++) {
       const hz = (i + j) % 2 === 0, x0 = i * ts + (hz ? 0 : k * w), y0 = j * ts + (hz ? k * w : 0), ww = hz ? ts : w, hh = hz ? w : ts;
       plank([[x0, y0], [x0 + ww, y0], [x0 + ww, y0 + hh], [x0, y0 + hh]], tone((rnd() - 0.5) * 0.12));
       grain(x0, y0, ww, hh, hz);
     }
   }
   const e = 0.06 * px;                                           // aluminium edge ramp
-  x.fillStyle = '#a3a8b0'; x.fillRect(0, 0, S, e); x.fillRect(0, S - e, S, e); x.fillRect(0, 0, e, S); x.fillRect(S - e, 0, e, S);
+  x.fillStyle = '#a3a8b0'; x.fillRect(0, 0, SX, e); x.fillRect(0, SY - e, SX, e); x.fillRect(0, 0, e, SY); x.fillRect(SX - e, 0, e, SY);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -1461,14 +1465,14 @@ function makeDancer(rnd) {
   return root;
 }
 
-function addDancers(g, size, count) {
+function addDancers(g, L, W, count) {
   if (!count) return;
   const crowd = new THREE.Group(); crowd.name = 'dancers';
-  const rnd = seeded(size * 1000 + count * 7 + 3);
-  const lim = size / 2 - 0.45, pts = [];
+  const rnd = seeded(Math.round(L * 100) * 1000 + Math.round(W * 10) + count * 7 + 3);
+  const lx = Math.max(0.1, L / 2 - 0.45), lz = Math.max(0.1, W / 2 - 0.45), pts = [];
   for (let i = 0, tries = 0; pts.length < count && tries < 4000; tries++) {
-    const x = (rnd() * 2 - 1) * lim, z = (rnd() * 2 - 1) * lim;
-    const minD = Math.max(0.55, Math.min(1.1, size / Math.sqrt(count) * 0.55));
+    const x = (rnd() * 2 - 1) * lx, z = (rnd() * 2 - 1) * lz;
+    const minD = Math.max(0.55, Math.min(1.1, Math.sqrt(L * W / count) * 0.55));
     if (pts.every(([a, b]) => Math.hypot(a - x, b - z) > minD)) pts.push([x, z]);
     else if (tries > 3000) pts.push([x, z]);
   }
@@ -2730,7 +2734,8 @@ const KINDS = {
   dance: {
     label: 'Piste de danse', glyph: '▦', color: '#ffffff', noColor: true, mat: { roughness: 0.25, metalness: 0.05 },
     opts: {
-      size: { label: 'Taille (carré)', type: 'select', values: [3, 4, 5, 6, 7, 8], names: { 3: '3 × 3 m', 4: '4 × 4 m', 5: '5 × 5 m', 6: '6 × 6 m', 7: '7 × 7 m', 8: '8 × 8 m' }, def: 5 },
+      length: { label: 'Longueur', type: 'select', values: HALF_M(2, 12), names: HALF_M_NAMES(2, 12), def: 5 },
+      width: { label: 'Largeur', type: 'select', values: HALF_M(2, 12), names: HALF_M_NAMES(2, 12), def: 5 },
       pattern: { label: 'Motif', type: 'select', values: Object.keys(DANCE_PATTERNS), names: DANCE_PATTERNS, def: 'damier' },
       wood: { when: (o) => ['parquet', 'chevrons', 'panneaux'].includes(o.pattern), label: 'Teinte du bois', type: 'select', values: Object.keys(WOOD), names: { clair: 'Chêne clair', naturel: 'Chêne naturel', fonce: 'Noyer foncé', blanchi: 'Blanchi', gris: 'Gris vieilli' }, def: 'naturel' },
       c1: { when: (o) => ['damier', 'uni', 'etoiles'].includes(o.pattern), label: 'Couleur', type: 'color', def: '#141414' },
@@ -2739,16 +2744,18 @@ const KINDS = {
       dancing: { when: (o) => o.dancers > 0, label: 'Animation', type: 'bool', def: true },
     },
     build(g, prim, o) {
+      const L = o.length, W = o.width;
       prim.map = danceTex(o);
       prim.color.set('#ffffff');
       prim.roughness = DANCE_ROUGH[o.pattern] ?? 0.4;
       if (o.pattern === 'etoiles') { prim.emissive.set('#ffffff'); prim.emissiveMap = prim.map; prim.emissiveIntensity = 0.45; prim.envMapIntensity = 0.3; }
       prim.needsUpdate = true;
-      box(g, o.size, 0.03, o.size, prim, 0, 0.015, 0);
-      addDancers(g, o.size, o.dancers);
+      box(g, L, 0.03, W, prim, 0, 0.015, 0);
+      addDancers(g, L, W, o.dancers);
       g.getObjectByName('dancers')?.children.forEach((d, i) => poseDancer(d, 0.37 + i * 0.13));
     },
-    quote: (o) => ({ ['piste_' + o.size]: 1 }),
+    migrate(opts, raw) { if (raw.size != null && raw.length == null) opts.length = opts.width = +raw.size; },   // plans saved with the old square size
+    quote: (o) => ({ piste_m2: Math.round(o.length * o.width * 100) / 100 }),
   },
   tent: {
     label: 'Tente', glyph: '△', color: '#f7f7f4', colorLabel: 'Toile', mat: { transparent: true, opacity: 0.9, side: THREE.DoubleSide, roughness: 0.8 },
@@ -3013,8 +3020,8 @@ const KINDS = {
     label: 'Revêtement de sol', glyph: '▭', color: '#ffffff', noColor: true, noShadow: true,
     opts: {
       type: { label: 'Type de sol', type: 'select', values: Object.keys(FLOOR_TYPES), names: Object.fromEntries(Object.entries(FLOOR_TYPES).map(([k, v]) => [k, v.name])), def: 'moquette' },
-      length: { label: 'Longueur', type: 'select', values: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30], names: Object.fromEntries([1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30].map((v) => [v, String(v).replace('.', ',') + ' m'])), def: 6 },
-      width: { label: 'Largeur', type: 'select', values: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30], names: Object.fromEntries([1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20, 25, 30].map((v) => [v, String(v).replace('.', ',') + ' m'])), def: 4 },
+      length: { label: 'Longueur', type: 'select', values: HALF_M(0.5, 30), names: HALF_M_NAMES(0.5, 30), def: 6 },
+      width: { label: 'Largeur', type: 'select', values: HALF_M(0.5, 30), names: HALF_M_NAMES(0.5, 30), def: 4 },
       color: { label: 'Couleur', type: 'color', def: '#7b2732' },
       fringe: { when: (o) => o.type === 'tapis', label: 'Franges', type: 'bool', def: true },
     },
@@ -3133,6 +3140,7 @@ const CATALOG = [
     { kind: 'dance', label: 'Piste de danse damier', sub: '5 × 5 m · couleurs au choix' },
     { kind: 'dance', label: 'Piste de danse parquet', sub: '5 × 5 m · imitation bois intégrale', opts: { pattern: 'parquet' } },
     { kind: 'dance', label: 'Piste de danse étoilée', sub: '5 × 5 m · fond noir', opts: { pattern: 'etoiles' } },
+    { kind: 'dance', label: 'Piste de danse rectangulaire', sub: '6 × 4,5 m · taille de 50 cm en 50 cm', opts: { length: 6, width: 4.5 } },
     { kind: 'bar', label: 'Comptoir bar', sub: '2,00 × 0,60 m' },
     { kind: 'barZinc', label: 'Bar bois blanc plateau zinc', sub: 'L 180 × P 50 × h 110 cm · bois recyclé' },
   ]],
@@ -3192,7 +3200,7 @@ const ITEM_DEFS = [
   ['chaise_bistrot', 'Chaise bistrot'], ['chaise_medaillon', 'Chaise médaillon'], ['chaise_fer', 'Chaise fer blanc vieilli (coussin blanc)'], ['chaise_bistrotPliante', 'Chaise pliante bistrot blanche (coussin blanc)'], ['chaise', 'Chaise pliante'], ['gueridon_rotin', 'Guéridon rotin naturel Ø 80 cm'], ['table_ronde_bois', 'Table ronde bois massif Ø 168 cm'], ['table_ronde', 'Table ronde Ø 1,80 m'], ['table_ronde_150', 'Table ronde Ø 1,50 m'], ['nappe_ronde', 'Nappe ronde (Ø 1,80 m)'], ['nappe_ronde_150', 'Nappe ronde (Ø 1,50 m)'],
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
-  ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_3', 'Piste de danse 3 × 3 m'], ['piste_4', 'Piste de danse 4 × 4 m'], ['piste_5', 'Piste de danse 5 × 5 m'], ['piste_6', 'Piste de danse 6 × 6 m'], ['piste_7', 'Piste de danse 7 × 7 m'], ['piste_8', 'Piste de danse 8 × 8 m'],
+  ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_m2', 'Piste de danse (m²)'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
@@ -3233,6 +3241,36 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 800);
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.enableDamping = true;
 orbit.maxPolarAngle = PI / 2 - 0.02;
+// Free navigation: the wheel / pinch zooms toward the point under the cursor (so you can travel through the plan),
+// right-drag slides along the floor, arrow keys walk, double-click on the floor glides the view there.
+orbit.zoomToCursor = true;
+orbit.screenSpacePanning = false;
+orbit.minDistance = 0.6;
+orbit.maxDistance = 160;
+const _floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), _hitP = new THREE.Vector3(), _mv = new THREE.Vector3();
+let glide = null;
+orbit.addEventListener('start', () => { glide = null; });   // grabbing the view stops a glide
+function glideTo(p) {
+  _mv.subVectors(p, orbit.target); _mv.y = 0;
+  glide = { from: orbit.target.clone(), cam: camera.position.clone(), d: _mv.clone(), t0: performance.now() };
+}
+function stepGlide() {
+  if (!glide) return;
+  const k = Math.min(1, (performance.now() - glide.t0) / 450), e = 1 - (1 - k) ** 3;
+  orbit.target.copy(glide.from).addScaledVector(glide.d, e);
+  camera.position.copy(glide.cam).addScaledVector(glide.d, e);
+  if (k >= 1) glide = null;
+}
+// Walk along the floor, relative to where the camera looks (arrow keys).
+function walk(fwd, side) {
+  glide = null;
+  const dir = new THREE.Vector3().subVectors(orbit.target, camera.position); dir.y = 0;
+  if (dir.lengthSq() < 1e-8) dir.set(0, 0, -1);
+  dir.normalize();
+  const right = new THREE.Vector3(-dir.z, 0, dir.x), step = Math.max(0.3, camera.position.distanceTo(orbit.target) * 0.06);
+  _mv.copy(dir).multiplyScalar(fwd * step).addScaledVector(right, side * step);
+  orbit.target.add(_mv); camera.position.add(_mv);
+}
 
 const sun = new THREE.DirectionalLight(0xffffff, 1.25);
 sun.position.set(8, 16, 6);
@@ -3249,6 +3287,14 @@ const envTex = scene.environment;
 
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
+// A stray invalid pixel (NaN / infinity, e.g. where a spot light meets a glowing screen) would be spread by the bloom
+// into a large black square: clean such pixels before the bloom.
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() { vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = clamp(c, 0.0, 64.0); }`,
+}));
 const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.2, 0.3, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -3340,6 +3386,7 @@ $('#zOut').addEventListener('click', () => setZoom(dToZ(camera.position.distance
 renderer.setAnimationLoop(() => {
   orbit.update();
   if (document.activeElement !== zoomR) zoomR.value = dToZ(camera.position.distanceTo(orbit.target));
+  stepGlide();
   const tNow = danceClock.getElapsedTime();
   animateDancers(tNow);
   animateCarousels(tNow);
@@ -3436,6 +3483,7 @@ function addObject(kind, o = {}) {
   if (!def) return null;
   const opts = {};
   for (const [k, d] of Object.entries(def.opts || {})) opts[k] = o.opts?.[k] ?? d.def;
+  def.migrate?.(opts, o.opts || {});
   const color = o.color ?? def.color;
   const prim = def.basic
     ? new THREE.MeshBasicMaterial({ color })
@@ -3652,7 +3700,7 @@ function autoJoin(moved = null) {
 function commit() {
   autoJoin();
   const s = JSON.stringify(serialize());
-  if (hist[hi] === s) return;
+  if (hist[hi] === s) { refresh(); return; }   // same plan, but the objects may have been rebuilt (e.g. sample reloaded): redraw the lists
   hist = hist.slice(0, hi + 1);
   hist.push(s);
   if (hist.length > 120) hist.shift();
@@ -3707,7 +3755,8 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   const hit = ray.intersectObjects(objects.filter((o) => o.visible && o.userData.locked), true)[0];
   let g = hit?.object || null;
   while (g && !objects.includes(g)) g = g.parent;
-  if (g) { select(g); toast(`« ${g.name} » sélectionné (verrouillé)`); }
+  if (g) { select(g); toast(`« ${g.name} » sélectionné (verrouillé)`); return; }
+  if (ray.ray.intersectPlane(_floor, _hitP)) glideTo(_hitP);   // double-click on the floor: go there
 });
 
 /* ---------- Tabs ---------- */
@@ -4232,8 +4281,8 @@ function renderMobile() {
 function adaptInput() {
   tc.setSize(COARSE.matches ? 1.6 : 1);
   $('.vp-hint').textContent = COARSE.matches
-    ? '1 doigt : tourner · 2 doigts : zoomer et déplacer · Toucher : sélectionner · Double-toucher : élément verrouillé'
-    : 'Clic : sélectionner · Glisser : tourner · Clic droit : déplacer la vue · Molette : zoom · Q / D : pivoter · F : cadrer · V : voir sous les toiles · L : verrouiller';
+    ? '1 doigt : tourner · 2 doigts : zoomer vers les doigts et se déplacer · Toucher : sélectionner · Double-toucher au sol : y aller'
+    : 'Clic : sélectionner · Glisser : tourner · Clic droit : glisser sur le plan · Molette : zoom vers la souris · Flèches : se déplacer · Double-clic au sol : y aller · Q / D : pivoter · F : cadrer · V : voir sous les toiles · L : verrouiller';
   if (!MOBILE.matches) closeSheets();
 }
 COARSE.addEventListener('change', adaptInput);
@@ -4273,6 +4322,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'l') toggleLock(selected);
   else if (k === 'f') focusSel();
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); del(); }
+  else if (k === 'arrowup') { e.preventDefault(); walk(1, 0); }
+  else if (k === 'arrowdown') { e.preventDefault(); walk(-1, 0); }
+  else if (k === 'arrowleft') { e.preventDefault(); walk(0, -1); }
+  else if (k === 'arrowright') { e.preventDefault(); walk(0, 1); }
   else if (k === 'escape') { if (!$('#modal').hidden) $('#modal').hidden = true; else if (!$('#lookBar').hidden) toggleLookBar(false); else select(null); }
 });
 
