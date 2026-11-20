@@ -2772,6 +2772,42 @@ const KINDS = {
     },
     quote: (o) => ({ ['tente_' + o.length]: 1 }),
   },
+  pagode: {
+    label: 'Pagode 5 × 5 m', glyph: '⌂', color: '#f7f7f4', colorLabel: 'Couleur de la toile', mat: { side: THREE.DoubleSide, roughness: 0.8 },
+    opts: {
+      walls: { label: 'Murs', type: 'select', values: ['aucun', 'fond', 'trois', 'quatre'], names: { aucun: 'Aucun (ouverte)', fond: 'Fond seulement', trois: '3 côtés (avant ouvert)', quatre: '4 côtés (fermée)' }, def: 'aucun' },
+      seeThrough: SEE,
+    },
+    build(g, prim, o) {
+      // Pagoda 5 × 5 m: four aluminium corner posts, eaves at 2,50 m, roof sweeping up in a concave curve to a point
+      // at about 5 m (flat at the eaves, steep near the top), small finial, valance around the eaves, ballast at each foot.
+      const W = 5, h = W / 2, H = 2.5, P = 5.0, N = 48;
+      const roof = new THREE.PlaneGeometry(W, W, N, N).rotateX(-PI / 2), pos = roof.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const r = Math.max(Math.abs(pos.getX(i)), Math.abs(pos.getZ(i))) / h;
+        pos.setY(i, H + (P - H) * (1 - r) ** 2.2);
+      }
+      roof.computeVertexNormals();
+      g.add(new THREE.Mesh(roof, prim));
+      const val = [];
+      for (const [w, d, x, z] of [[W, 0.01, 0, h], [W, 0.01, 0, -h], [0.01, W, h, 0], [0.01, W, -h, 0]]) val.push(new THREE.BoxGeometry(w, 0.25, d).translate(x, H - 0.125, z));
+      const wallSides = { aucun: [], fond: [[0, -1]], trois: [[0, -1], [1, 0], [-1, 0]], quatre: [[0, -1], [1, 0], [-1, 0], [0, 1]] }[o.walls] || [];
+      for (const [sx, sz] of wallSides) val.push(new THREE.BoxGeometry(sx ? 0.01 : W, H - 0.25, sx ? W : 0.01).translate(sx * h, (H - 0.25) / 2, sz * h));
+      g.add(new THREE.Mesh(mergeLocal(val), prim));
+      const alu = [];
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        alu.push(new THREE.BoxGeometry(0.07, H, 0.07).translate(sx * (h - 0.035), H / 2, sz * (h - 0.035)));
+        alu.push(new THREE.BoxGeometry(0.25, 0.01, 0.25).translate(sx * (h - 0.035), 0.005, sz * (h - 0.035)));
+      }
+      for (const [w, d, x, z] of [[W, 0.05, 0, h - 0.035], [W, 0.05, 0, -h + 0.035], [0.05, W, h - 0.035, 0], [0.05, W, -h + 0.035, 0]]) alu.push(new THREE.BoxGeometry(w, 0.06, d).translate(x, H - 0.03, z));
+      alu.push(new THREE.CylinderGeometry(0.012, 0.03, 0.45, 8).translate(0, P + 0.2, 0));   // finial
+      g.add(new THREE.Mesh(mergeLocal(alu), MAT.pole));
+      const lest = [];
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) lest.push(new THREE.BoxGeometry(0.4, 0.12, 0.4).translate(sx * (h - 0.25), 0.06, sz * (h - 0.25)));
+      g.add(new THREE.Mesh(mergeLocal(lest), MAT.black));
+    },
+    quote: (o) => ({ pagode_5x5: 1, pagode_mur: { aucun: 0, fond: 1, trois: 3, quatre: 4 }[o.walls] || 0, lest_pagode: 4 }),
+  },
   shade: {
     label: 'Voile d\'ombrage', glyph: '◇', color: '#efe6d2', colorLabel: 'Toile', mat: { side: THREE.DoubleSide, roughness: 0.9 },
     opts: {
@@ -3168,6 +3204,8 @@ const CATALOG = [
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m', sub: '3 mâts · implantation 27 × 16,5 m', opts: { size: '21x10.5' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m + scintillant', sub: '220 m² · scintillant du sol, par-dessus le filin, d\'un bord à l\'autre', opts: { size: '21x10.5', twinkle: true } },
     { kind: 'stretch', label: 'Stretch 21 × 15 m', sub: '6 mâts · implantation 27 × 21 m', opts: { size: '21x15' } },
+    { kind: 'pagode', label: 'Pagode 5 × 5 m', sub: '25 m² · h 2,50 m sous chéneau · couleur au choix' },
+    { kind: 'pagode', label: 'Pagode 5 × 5 m fermée 3 côtés', sub: 'murs fond + côtés · avant ouvert', opts: { walls: 'trois' } },
     { kind: 'shade', label: 'Voile d\'ombrage 4 × 5 m', sub: '4 poteaux bambou · implantation 10 × 11 m' },
     { kind: 'shade', label: '4 voiles d\'ombrage accrochées', sub: 'bloc 8 × 10 m · poteaux partagés', opts: { count: 4 } },
     { kind: 'stage', label: 'Scène 4 × 3 m', sub: '6 modules 1 × 2 m · h 60 cm · escalier' },
@@ -3240,7 +3278,7 @@ const ITEM_DEFS = [
   ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_m2', 'Piste de danse (m²)'],
-  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
+  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'], ['plancher_m2', 'Plancher événementiel (m²)'], ['plancher_bordure_m', 'Bordure de plancher (mètres)'], ['rampe_pmr', 'Rampe d\'accès PMR'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
