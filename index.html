@@ -377,6 +377,20 @@ body.viewer .status, body.viewer .locked-wrap, body.viewer .vp-rot, body.viewer 
 body.viewer .dock { bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; max-width: calc(100% - 24px) !important; }
 body.viewer .vp-zoom { right: max(12px, env(safe-area-inset-right, 0px)) !important; }
 body.viewer .vp-tag { left: 16px; }
+.ai-box { width: min(620px, 100%); }
+.ai-input { display: flex; gap: 8px; align-items: stretch; }
+.ai-input textarea { flex: 1; min-width: 0; height: 96px; min-height: 64px; resize: vertical; font: 400 14px/1.45 var(--font-ui); color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.ai-input textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+#aiMic { flex: none; width: 52px; justify-content: center; }
+#aiMic svg { width: 22px; height: 22px; }
+#aiMic.listening { background: var(--danger); color: #fff; animation: aiPulse 1.2s ease-in-out infinite; }
+@keyframes aiPulse { 50% { box-shadow: 0 0 0 6px rgba(225, 29, 72, 0.18); } }
+.ai-partial { margin: 0; min-height: 1.2em; font-size: 13px; font-style: italic; color: var(--muted); }
+.ai-result { display: grid; gap: 8px; background: var(--field); border-radius: 12px; padding: 12px 14px; }
+.ai-result b { font-size: 13px; }
+.ai-result ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.ai-status { margin: 0; font-size: 13px; color: var(--muted); }
+.ai-status.err { color: var(--danger); }
 .share-send { display: flex; flex-wrap: wrap; gap: 8px; }
 .share-send[hidden] { display: none; }
 .share-send .btn { text-decoration: none; }
@@ -418,6 +432,7 @@ body.viewer .vp-tag { left: 16px; }
       <label class="btn ghost" for="fileImport" title="Importer un plan (JSON)"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg><span class="lbl">Importer</span></label>
       <input id="fileImport" type="file" accept=".json,application/json" hidden>
       <span class="savestate" id="saveState"></span>
+      <button class="btn" type="button" id="btnAI" hidden title="Décrire un plan à voix haute ou par écrit"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span class="lbl">Assistant</span></button>
       <button class="btn" type="button" id="btnShare" title="Créer un lien pour que le client voie le plan en 3D"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg><span class="lbl">Lien client</span></button>
       <button class="btn primary" type="button" id="btnSave" title="Enregistrer dans la bibliothèque de l'équipe (Ctrl+S)">Enregistrer</button>
     </div>
@@ -571,7 +586,28 @@ body.viewer .vp-tag { left: 16px; }
   </nav>
 </div>
 
-<div class="modal" id="shareModal" hidden>
+<div class="modal" id="aiModal" hidden>
+  <div class="box ai-box">
+    <h3>Assistant plan</h3>
+    <p class="note">Dites ou écrivez ce que vous voulez installer. Exemple : « Une guirlande guinguette en zigzag, écart 4 m, sur 25 m, avec dessous un banquet de 12 tables PVC en chaises bistrot ».</p>
+    <div class="ai-input">
+      <textarea id="aiText" aria-label="Description du plan" placeholder="Décrivez le plan…"></textarea>
+      <button class="btn" type="button" id="aiMic" hidden title="Dicter" aria-label="Dicter"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    </div>
+    <p class="ai-partial" id="aiPartial"></p>
+    <div class="ai-result" id="aiResult" hidden>
+      <b id="aiSummary"></b>
+      <ul id="aiList"></ul>
+      <p class="note" id="aiNotes"></p>
+    </div>
+    <p class="ai-status" id="aiStatus"></p>
+    <div class="actions" style="justify-content:flex-end">
+      <button class="btn" type="button" id="aiClose">Fermer</button>
+      <button class="btn primary" type="button" id="aiGo">Préparer le plan</button>
+      <button class="btn primary" type="button" id="aiApply" hidden>Valider et créer</button>
+    </div>
+  </div>
+</div>
   <div class="box">
     <h3 id="shareTitle">Lien client</h3>
     <p id="shareMsg"></p>
@@ -4780,6 +4816,145 @@ $('#btnPng').addEventListener('click', () => {
   }, () => { $('#libStatus').textContent = 'La bibliothèque ne répond plus. Rechargez la page.'; });
   updateSaveState();
   renderLib();
+})();
+
+/* ---------- Assistant ----------
+   The planner describes a set-up in words (typed, or spoken through dictation); Claude turns it into products from
+   the catalogue with their options and positions; the page checks every value against the catalogue, shows the list,
+   and builds it in one step (one Ctrl+Z undoes it). Only in the claude.ai version, where Claude is available. */
+let aiSample = null, aiDict = null, aiPlan = null, aiCtl = null;
+function aiCatalogue() {
+  const lines = [];
+  for (const [kind, def] of Object.entries(KINDS)) {
+    if (['person', 'box', 'column'].includes(kind)) continue;
+    const opts = Object.entries(def.opts || {}).filter(([, d]) => !d.hidden).map(([k, d]) => {
+      if (d.type === 'select') return `${k} (${d.label}) : ${d.values.map((v) => (d.names?.[v] && d.names[v] !== String(v) ? `${v} = ${d.names[v]}` : v)).join(' | ')} [défaut ${d.def}]`;
+      if (d.type === 'number') return `${k} (${d.label}) : nombre de ${d.min} à ${d.max}, pas de ${d.step} [défaut ${d.def}]`;
+      if (d.type === 'bool') return `${k} (${d.label}) : true | false [défaut ${d.def}]`;
+      return `${k} (${d.label}) : couleur #rrggbb [défaut ${d.def}]`;
+    });
+    lines.push(`- kind "${kind}" : ${def.label}${opts.length ? '\n    ' + opts.join('\n    ') : ''}`);
+  }
+  lines.push('', 'Produits du catalogue (nom commercial → kind et options) :');
+  for (const [, items] of CATALOG) for (const it of items) lines.push(`- ${it.label} (${it.sub}) → ${it.kind} ${JSON.stringify(it.opts || {})}`);
+  return lines.join('\n');
+}
+function aiScene() {
+  const v = VENUES[room.type];
+  const head = v ? `Lieu : ${v.name} (lieu modélisé, environ ${room.w} × ${room.d} m ; l'origine est au milieu de l'esplanade où l'on pose les tentes)` : room.type === 'aucun' ? 'Lieu : sans sol défini' : `Lieu : ${room.type === 'salle' ? 'salle' : 'jardin / extérieur'} de ${room.w} m (x) × ${room.d} m (z), centrée sur l'origine`;
+  const items = objects.map((o) => { _b.setFromObject(o).getSize(_v); return `- « ${o.name} » (${o.userData.kind}) : centre x=${o.position.x.toFixed(1)} z=${o.position.z.toFixed(1)}, emprise ${_v.x.toFixed(1)} × ${_v.z.toFixed(1)} m`; });
+  return head + '\nÉléments déjà sur le plan :\n' + (items.length ? items.join('\n') : '(aucun)');
+}
+function aiPrompt(request) {
+  return `Tu prépares un plan d'implantation 3D pour Oravis, loueur de matériel événementiel. Transforme la demande en une liste de produits du catalogue ci-dessous, avec leurs options et leur position.
+
+REPÈRE : mètres. x = longueur (de gauche à droite), z = profondeur (du fond vers le devant). Chaque produit est placé par son centre. "rot" = rotation en degrés autour de la verticale ; à 0, la longueur d'un produit est le long de x.
+
+${aiScene()}
+
+RÈGLES
+- N'utilise que les kinds et les valeurs d'options listés, écrits exactement. Omets une option pour garder sa valeur par défaut.
+- Choisis les options qui correspondent à la demande (ex. « zigzag » → layout "zigzag" ou "zigzag-simple" selon la demande ; « écart 4 m » → spacing 4 ; « sur 25 m » → length 25 ; « banquet de 12 tables » → tpvc avec tables 12 ; « chaises bistrot » → chairModel "bistrot").
+- Quand un élément va « sous » ou « dans » un autre (tables sous la guirlande ou sous la tente), centre-le dessous et oriente-le dans le même sens.
+- Sinon, place les éléments côte à côte sans qu'ils se chevauchent, avec au moins 1,5 m de passage, sans chevaucher les éléments déjà présents. Ne modifie pas les éléments existants.
+- Si une valeur demandée n'existe pas, prends la plus proche et signale-le dans "notes".
+- Emprises utiles : guinguette = length × width ; tpvc = (tables × 2 m) × 0,9 m, chaises comprises ≈ (tables × 2 m) × 1,8 m ; tround Ø 1,8 m, avec chaises ≈ 3,2 m ; trect 1,8 × 0,76 m ; serpentine : segment de 2,6 m de pointe à pointe ; stretch : taille indiquée, avec haubans compter 6 m de plus ; dance et flooring et plancher = length × width ; stage = width × depth ; pagode 5 × 5 m.
+
+CATALOGUE
+${aiCatalogue()}
+
+RÉPONSE : uniquement ce JSON, sans autre texte :
+{"summary": "une phrase en français qui résume le plan", "items": [{"kind": "guinguette", "name": "Guirlande zigzag", "opts": {"layout": "zigzag", "length": 25, "spacing": 4}, "x": 0, "z": 0, "rot": 0, "line": "Guirlande guinguette zigzag 25 × 6 m, écart 4 m"}], "notes": "points d'attention, ou chaîne vide"}
+
+DEMANDE : « ${request} »`;
+}
+function aiClean(it) {
+  const def = KINDS[it?.kind];
+  if (!def?.build || ['person', 'box', 'column'].includes(it.kind)) return null;
+  const opts = {};
+  for (const [k, v] of Object.entries(it.opts && typeof it.opts === 'object' ? it.opts : {})) {
+    const d = def.opts?.[k];
+    if (!d || d.hidden) continue;
+    if (d.type === 'select') {
+      if (typeof d.values[0] === 'number') { const n = +v; if (Number.isFinite(n)) opts[k] = d.values.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a)); }
+      else if (d.values.includes(String(v))) opts[k] = String(v);
+    } else if (d.type === 'number') { const n = +v; if (Number.isFinite(n)) opts[k] = +Math.min(d.max, Math.max(d.min, Math.round(n / d.step) * d.step)).toFixed(2); }
+    else if (d.type === 'bool') opts[k] = v === true || v === 'true';
+    else if (/^#[0-9a-f]{6}$/i.test(String(v))) opts[k] = String(v);
+  }
+  if (it.kind === 'serpentine') opts.shapeV = 2;   // shapes named as they are today
+  const num = (n, lim) => Math.max(-lim, Math.min(lim, Number.isFinite(+n) ? +n : 0));
+  return { kind: it.kind, name: typeof it.name === 'string' && it.name.trim() ? it.name.trim().slice(0, 40) : null, opts, x: num(it.x, 150), z: num(it.z, 150), rot: num(it.rot, 360), line: String(it.line || def.label).slice(0, 160) };
+}
+const aiMsg = (code) => ({
+  not_granted: 'Claude n\'est pas autorisé pour cet outil : autorisez-le dans le menu Permissions de la page.',
+  sampling_disabled: 'Claude n\'est pas disponible pour ce compte.',
+  rate_limited: 'Trop de demandes pour le moment : réessayez dans un instant.',
+  session_expired: 'Votre session claude.ai a expiré : reconnectez-vous.',
+  invalid_json: 'La réponse n\'a pas pu être lue : cliquez de nouveau sur « Préparer le plan ».',
+  refused: 'Cette demande n\'a pas pu être traitée : reformulez-la.',
+})[code] || 'L\'assistant n\'a pas répondu : réessayez.';
+function aiReset() { aiPlan = null; $('#aiResult').hidden = true; $('#aiApply').hidden = true; $('#aiGo').textContent = 'Préparer le plan'; }
+$('#btnAI').addEventListener('click', () => { $('#aiModal').hidden = false; $('#aiStatus').textContent = ''; $('#aiText').focus(); });
+$('#aiClose').addEventListener('click', () => { aiCtl?.abort(); if (aiDict?.active()) aiDict.stop(); $('#aiModal').hidden = true; });
+$('#aiText').addEventListener('input', aiReset);
+$('#aiText').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('#aiGo').click(); } });
+$('#aiGo').addEventListener('click', async () => {
+  if (aiCtl) { aiCtl.abort(); return; }                     // the button reads "Arrêter" while Claude works
+  const request = $('#aiText').value.trim();
+  if (!request) { $('#aiStatus').textContent = 'Décrivez d\'abord le plan, à voix haute ou par écrit.'; return; }
+  if (aiDict?.active()) await aiDict.stop();
+  aiReset();
+  const st = $('#aiStatus'); st.classList.remove('err'); st.textContent = 'Préparation du plan…';
+  aiCtl = new AbortController(); $('#aiGo').textContent = 'Arrêter';
+  try {
+    const res = await aiSample.json(aiPrompt(request), { signal: aiCtl.signal });
+    const items = (Array.isArray(res?.items) ? res.items : []).map(aiClean).filter(Boolean).slice(0, 60);
+    if (!items.length) { st.textContent = 'Je n\'ai reconnu aucun produit du catalogue dans cette demande : précisez-la.'; return; }
+    aiPlan = items;
+    $('#aiSummary').textContent = String(res.summary || 'Je vais ajouter :').slice(0, 300);
+    $('#aiList').replaceChildren(...items.map((it) => { const li = document.createElement('li'); li.textContent = it.line; return li; }));
+    $('#aiNotes').textContent = String(res.notes || '').slice(0, 400);
+    $('#aiResult').hidden = false; $('#aiApply').hidden = false;
+    st.textContent = 'Vérifiez la liste, puis validez : tout sera ajouté au plan (Ctrl+Z pour annuler).';
+  } catch (e) {
+    if (e?.code !== 'cancelled') { st.classList.add('err'); st.textContent = aiMsg(e?.code); } else st.textContent = '';
+    if (['not_granted', 'sampling_disabled'].includes(e?.code)) $('#aiGo').disabled = true;
+  } finally { aiCtl = null; if (!aiPlan) $('#aiGo').textContent = 'Préparer le plan'; else $('#aiGo').textContent = 'Refaire'; }
+});
+$('#aiApply').addEventListener('click', () => {
+  if (!aiPlan) return;
+  let last = null;
+  for (const it of aiPlan) {
+    last = addObject(it.kind, { opts: it.opts, name: it.name ? uniqueName(it.name) : undefined, p: [it.x, KINDS[it.kind].y ?? 0, it.z], r: [0, THREE.MathUtils.degToRad(it.rot), 0] });
+  }
+  autoJoin();
+  select(null, false);
+  commit();
+  toast(`${aiPlan.length} élément${aiPlan.length > 1 ? 's' : ''} ajouté${aiPlan.length > 1 ? 's' : ''} au plan · Ctrl+Z pour annuler`);
+  $('#aiModal').hidden = true; $('#aiText').value = ''; aiReset();
+});
+(async () => {
+  if (!window.claude?.use || VIEW) return;
+  [aiSample, aiDict] = await Promise.all([use('sample'), use('dictation')]);
+  $('#btnAI').hidden = !aiSample;
+  if (!aiDict) return;
+  const mic = $('#aiMic'); mic.hidden = false;
+  aiDict.onPartial(({ text }) => { $('#aiPartial').textContent = text; });
+  aiDict.onFinal(({ text }) => { const t = $('#aiText'); t.value += t.value ? text : text.trimStart(); aiReset(); });
+  aiDict.onState(({ state, reason }) => {
+    const on = state !== 'idle';
+    mic.classList.toggle('listening', on); mic.title = on ? 'Arrêter la dictée' : 'Dicter';
+    if (!on) $('#aiPartial').textContent = '';
+    if (reason === 'unavailable' || reason === 'not_granted') mic.hidden = true;
+  });
+  mic.addEventListener('click', () => {
+    if (aiDict.active()) { aiDict.stop(); return; }
+    aiDict.start().catch((e) => {
+      if (e?.code === 'not_granted' || e?.code === 'unavailable') { mic.hidden = true; $('#aiStatus').textContent = 'Dictée indisponible ici : écrivez la demande.'; }
+      else if (e?.code !== 'stopped' && e?.code !== 'dismissed') $('#aiStatus').textContent = 'La dictée n\'a pas démarré : réessayez ou écrivez la demande.';
+    });
+  });
 })();
 
 /* ---------- Client link ----------
