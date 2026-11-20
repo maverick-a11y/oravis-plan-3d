@@ -368,6 +368,18 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   body.sheet-up .vp-zoom { display: none; }
 }
 @media (max-width: 480px) { .org { display: none; } }
+/* Client viewer (link "#vue=…"): the plan only, to turn around and zoom; no editing */
+.viewer-title { display: none; }
+body.viewer .viewer-title { display: grid; gap: 1px; min-width: 0; padding-left: 4px; }
+body.viewer .brand-name { display: none; }
+body.viewer .viewer-title b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.viewer .viewer-title span { font: 400 11px var(--font-mono); color: var(--muted); }
+body.viewer .toolbar .tgroup, body.viewer .toolbar .vsep, body.viewer .toolbar .org, body.viewer #btnMore, body.viewer .panel, body.viewer .mtabs, body.viewer .msel,
+body.viewer .status, body.viewer .locked-wrap, body.viewer .vp-rot, body.viewer .vp-empty, body.viewer .dock [data-mode], body.viewer #btnSnap, body.viewer #btnPng, body.viewer .dock > .vsep { display: none !important; }
+body.viewer .dock { bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; max-width: calc(100% - 24px) !important; }
+body.viewer .vp-zoom { right: max(12px, env(safe-area-inset-right, 0px)) !important; }
+body.viewer .vp-tag { left: 16px; }
+.share-url { width: 100%; font: 400 12px var(--font-mono); padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -375,7 +387,8 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   <header class="toolbar glass">
     <div class="brand">
       <span class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M3 20.5h18M5 20.5V10.5l7-6 7 6v10"/><path d="M9.5 20.5v-5h5v5"/></svg></span>
-      Oravis Plan Événement 3D
+      <span class="brand-name">Oravis Plan Événement 3D</span>
+      <span class="viewer-title"><b id="vwName"></b><span id="vwSub"></span></span>
       <span class="org">usage interne</span>
     </div>
     <span class="vsep"></span>
@@ -401,6 +414,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
       <label class="btn ghost" for="fileImport" title="Importer un plan (JSON)"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg><span class="lbl">Importer</span></label>
       <input id="fileImport" type="file" accept=".json,application/json" hidden>
       <span class="savestate" id="saveState"></span>
+      <button class="btn" type="button" id="btnShare" title="Créer un lien pour que le client voie le plan en 3D"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg><span class="lbl">Lien client</span></button>
       <button class="btn primary" type="button" id="btnSave" title="Enregistrer dans la bibliothèque de l'équipe (Ctrl+S)">Enregistrer</button>
     </div>
   </header>
@@ -553,6 +567,17 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
   </nav>
 </div>
 
+<div class="modal" id="shareModal" hidden>
+  <div class="box">
+    <h3 id="shareTitle">Lien client</h3>
+    <p id="shareMsg"></p>
+    <input id="shareUrl" class="share-url" type="text" spellcheck="false" aria-label="Adresse">
+    <div class="actions" style="justify-content:flex-end">
+      <button class="btn" type="button" id="shareClose">Fermer</button>
+      <button class="btn primary" type="button" id="shareOk">Copier le lien</button>
+    </div>
+  </div>
+</div>
 <div class="modal" id="modal" hidden>
   <div class="box">
     <h3 id="modalTitle">Plan au format JSON</h3>
@@ -583,6 +608,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const $ = (s) => document.querySelector(s);
 const STORE = 'planevt.plan.v2';
+const VIEW = location.hash.startsWith('#vue=') ? location.hash.slice(5) : null;   // client view link
 const PI = Math.PI;
 
 /* ---------- Shared materials & geometry ---------- */
@@ -3694,7 +3720,7 @@ function rebuild(g, patch) {
 
 /* ---------- History & persistence ---------- */
 let hist = [], hi = -1;
-function save(s) { try { localStorage.setItem(STORE, s); } catch (e) {} }
+function save(s) { if (VIEW) return; try { localStorage.setItem(STORE, s); } catch (e) {} }   // a client's view never overwrites a draft
 /* Jumelage automatique: when a stretch tent is dropped with one of its sides facing a side of the same length of
    another stretch tent (parallel, less than 1,5 m apart), it snaps onto it and the two hook together. Every commit
    re-checks all tents, so a tent moved away is unhooked. */
@@ -3816,7 +3842,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
   const onGizmo = down.axis && selected;
   down = null;
-  if (moved > 4 || onGizmo) return;
+  if (moved > 4 || onGizmo || VIEW) return;
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -3833,7 +3859,7 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   const hit = ray.intersectObjects(objects.filter((o) => o.visible && o.userData.locked), true)[0];
   let g = hit?.object || null;
   while (g && !objects.includes(g)) g = g.parent;
-  if (g) { select(g); toast(`« ${g.name} » sélectionné (verrouillé)`); return; }
+  if (g && !VIEW) { select(g); toast(`« ${g.name} » sélectionné (verrouillé)`); return; }
   if (ray.ray.intersectPlane(_floor, _hitP)) glideTo(_hitP);   // double-click on the floor: go there
 });
 
@@ -4392,6 +4418,7 @@ window.addEventListener('keydown', (e) => {
   }
   const mod = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
+  if (VIEW && (mod || !['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 't', 'n', 'v'].includes(k))) return;   // client view: look around only
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && k === 'y') { e.preventDefault(); redo(); return; }
   if (mod && k === 'd') { e.preventDefault(); duplicate(); return; }
@@ -4600,6 +4627,58 @@ $('#btnPng').addEventListener('click', () => {
   renderLib();
 })();
 
+/* ---------- Client link ----------
+   The whole plan travels inside the link (compressed after "#vue="), so the client opens it in any browser and can
+   turn and zoom around it without an account. The link points at the installed app (its GitHub / Netlify address). */
+const APP_URL_STORE = STORE + '.appUrl';
+const b64url = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+async function encodePlan(data) {
+  const z = new Blob([JSON.stringify(data)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return b64url(new Uint8Array(await new Response(z).arrayBuffer()));
+}
+async function decodePlan(code) {
+  const bin = atob(code.replace(/-/g, '+').replace(/_/g, '/')), bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());
+}
+function appUrl() {
+  if (!window.claude) return location.href.split('#')[0];   // the installed app: link to itself
+  try { return localStorage.getItem(APP_URL_STORE) || ''; } catch (e) { return ''; }
+}
+let shareStep = null;
+async function openShare() {
+  const base = appUrl();
+  const m = $('#shareModal'), inp = $('#shareUrl');
+  m.hidden = false;
+  if (!base) {
+    shareStep = 'base';
+    $('#shareTitle').textContent = 'Adresse de votre application';
+    $('#shareMsg').textContent = 'Le client ouvre le plan sur votre application en ligne. Collez son adresse une fois (par ex. https://votre-compte.github.io/oravis-3d/) : elle est gardée sur cet appareil.';
+    inp.value = ''; inp.readOnly = false; inp.placeholder = 'https://…github.io/…/'; $('#shareOk').textContent = 'Valider'; inp.focus();
+    return;
+  }
+  shareStep = 'link';
+  const url = base.replace(/#.*$/, '') + '#vue=' + (await encodePlan(serialize()));
+  $('#shareTitle').textContent = 'Lien client';
+  $('#shareMsg').textContent = `Envoyez ce lien au client (e-mail, SMS, WhatsApp). Il verra le plan « ${evt.name || 'sans nom'} » en 3D et pourra le faire tourner et zoomer, sans pouvoir le modifier. Le lien contient le plan tel qu'il est maintenant : après une modification, créez un nouveau lien.`;
+  inp.value = url; inp.readOnly = true; $('#shareOk').textContent = 'Copier le lien'; inp.select();
+}
+$('#btnShare').addEventListener('click', openShare);
+$('#shareClose').addEventListener('click', () => { $('#shareModal').hidden = true; });
+$('#shareOk').addEventListener('click', () => {
+  const inp = $('#shareUrl');
+  if (shareStep === 'base') {
+    const v = inp.value.trim();
+    if (!/^https:\/\/\S+$/.test(v)) { $('#shareMsg').textContent = 'Adresse invalide : elle doit commencer par https://'; return; }
+    try { localStorage.setItem(APP_URL_STORE, v); } catch (e) {}
+    openShare();
+    return;
+  }
+  inp.select();
+  const done = () => { $('#shareOk').textContent = 'Lien copié'; };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(inp.value).then(done).catch(() => { $('#shareMsg').textContent = 'Copiez le lien sélectionné (Cmd/Ctrl+C).'; });
+  else $('#shareMsg').textContent = 'Copiez le lien sélectionné (Cmd/Ctrl+C).';
+});
+
 /* ---------- Boot ---------- */
 let initial = SAMPLE;
 try {
@@ -4608,10 +4687,24 @@ try {
   const meta = JSON.parse(localStorage.getItem(META_STORE));
   if (meta?.currentId) { currentId = meta.currentId; savedKey = meta.savedKey; }
 } catch (e) {}
-load(initial);
-view(false);
-commit();
-refresh();
+if (VIEW) {
+  // client view: show the plan from the link, nothing else
+  document.body.classList.add('viewer');
+  document.title = 'Plan 3D · Oravis';
+  load({ room, event: evt, items: [] });
+  decodePlan(VIEW).then((data) => {
+    load(data);
+    $('#vwName').textContent = data.event?.name || 'Votre événement';
+    $('#vwSub').textContent = ['Plan 3D Oravis', data.event?.date ? new Date(data.event.date + 'T12:00').toLocaleDateString('fr-FR', { dateStyle: 'long' }) : ''].filter(Boolean).join(' · ');
+    view(false); commit(); refresh();
+    toast('Glissez pour tourner, molette ou pincement pour zoomer');
+  }).catch(() => toast('Ce lien de plan est incomplet : demandez un nouveau lien.'));
+} else {
+  load(initial);
+  view(false);
+  commit();
+  refresh();
+}
 </script>
 
 
