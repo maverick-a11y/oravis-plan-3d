@@ -3669,7 +3669,8 @@ function label(text) {
 const fmtM = (n) => String(n).replace('.', ',');
 
 function buildRoom() {
-  roomGroup.traverse((c) => { c.geometry?.dispose(); if (c.material) { c.material.map?.dispose(); c.material.dispose(); } });
+  // venue buildings use one material per face (arrays): dispose each one
+  roomGroup.traverse((c) => { c.geometry?.dispose(); for (const m of [c.material].flat()) if (m) { m.map?.dispose(); m.dispose(); } });
   roomGroup.clear();
   if (VENUES[room.type]) Object.assign(room, { w: VENUES[room.type].w, d: VENUES[room.type].d });
   const { type, w, d } = room;
@@ -3715,9 +3716,11 @@ function view(top = false) {
 }
 
 for (const id of ['#roomType', '#roomW', '#roomD']) $(id).addEventListener('change', () => {
-  const w = Math.min(200, Math.max(4, Math.round(+$('#roomW').value || room.w)));
-  const d = Math.min(200, Math.max(4, Math.round(+$('#roomD').value || room.d)));
-  room = { type: $('#roomType').value, w, d };
+  const type = $('#roomType').value, leaving = VENUES[room.type] && !VENUES[type];
+  // coming back from a modelled venue: start again from the usual 20 × 14 m instead of the venue's size
+  const w = leaving ? 20 : Math.min(200, Math.max(4, Math.round(+$('#roomW').value || room.w)));
+  const d = leaving ? 14 : Math.min(200, Math.max(4, Math.round(+$('#roomD').value || room.d)));
+  room = { type, w, d };
   buildRoom();
   commit();
 });
