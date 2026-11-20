@@ -7,8 +7,8 @@ Application web installable (ordinateur, Android, iPhone), qui fonctionne hors c
 
 1. Sur github.com, créez un dépôt (bouton **New**), par exemple `oravis-3d`.
    Choisissez **Private** si vous avez un compte payant ; sinon **Public** (le code sera visible, pas vos plans).
-2. Dans le dépôt : **Add file → Upload files**, glissez **tous les fichiers de ce zip** (pas le dossier),
-   puis **Commit changes**.
+2. Dans le dépôt : **Add file → Upload files**, glissez **tout le contenu de ce zip**
+   (les fichiers **et le dossier `vendor`**), puis **Commit changes**.
 3. **Settings → Pages** : Source = **Deploy from a branch**, Branch = **main**, dossier **/ (root)**, **Save**.
 4. Après 1 à 2 minutes, l'adresse s'affiche en haut de la page Pages :
    `https://VOTRE-COMPTE.github.io/oravis-3d/`
@@ -28,4 +28,11 @@ Application web installable (ordinateur, Android, iPhone), qui fonctionne hors c
 ## Mettre à jour
 
 Remplacez les fichiers du dépôt par ceux d'un nouveau zip (**Add file → Upload files**, mêmes noms).
+Le dossier `vendor` (moteur 3D et polices, servis par le site lui-même) change rarement :
+en général il suffit d'envoyer `index.html` et `sw.js`.
 Les appareils récupèrent la nouvelle version à la prochaine ouverture avec connexion.
+
+## Lien client
+
+Le bouton **Lien client** crée un lien qui contient le plan ; le client l'ouvre dans son navigateur,
+peut tourner et zoomer, sans rien modifier. Boutons d'envoi WhatsApp, e-mail et SMS intégrés.

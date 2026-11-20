@@ -17,9 +17,7 @@
 <body>
 <title>Oravis Plan Événement 3D</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
 <style>
 /* Layout: full-bleed 3D scene; frosted floating cards on top — header bar, catalogue (left), properties (right),
    tool dock (bottom centre), status chip (bottom left). Below 960 px everything stacks under a 60 % viewport. */
@@ -379,6 +377,11 @@ body.viewer .status, body.viewer .locked-wrap, body.viewer .vp-rot, body.viewer 
 body.viewer .dock { bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; max-width: calc(100% - 24px) !important; }
 body.viewer .vp-zoom { right: max(12px, env(safe-area-inset-right, 0px)) !important; }
 body.viewer .vp-tag { left: 16px; }
+.share-send { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-send[hidden] { display: none; }
+.share-send .btn { text-decoration: none; }
+.share-send .btn.wa { background: #25d366; color: #0b2e17; }
+#btnShare .lbl { display: inline !important; }   /* the client link button always shows its name */
 .share-url { width: 100%; font: 400 12px var(--font-mono); padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -572,6 +575,12 @@ body.viewer .vp-tag { left: 16px; }
     <h3 id="shareTitle">Lien client</h3>
     <p id="shareMsg"></p>
     <input id="shareUrl" class="share-url" type="text" spellcheck="false" aria-label="Adresse">
+    <div class="share-send" id="shareSend" hidden>
+      <a class="btn wa" id="shareWa" target="_blank" rel="noopener"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 20.5l1.3-4.2A8.5 8.5 0 1 1 8 19.4z"/><path d="M9 8.5c.3 2.6 2.4 5 5.2 5.8l1.3-1.3 1.8.9c-.3 1.3-1.3 2-2.6 1.8C11 15.1 8.6 12.7 8 9.9c-.2-1.3.5-2.3 1.8-2.6l.9 1.8z"/></svg>Envoyer par WhatsApp</a>
+      <a class="btn" id="shareMail"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>E-mail</a>
+      <a class="btn" id="shareSms"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>SMS</a>
+      <button class="btn" type="button" id="shareNative" hidden><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6h14v-6"/></svg>Partager…</button>
+    </div>
     <div class="actions" style="justify-content:flex-end">
       <button class="btn" type="button" id="shareClose">Fermer</button>
       <button class="btn primary" type="button" id="shareOk">Copier le lien</button>
@@ -590,8 +599,8 @@ body.viewer .vp-tag { left: 16px; }
 
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  "three": "./vendor/three/build/three.module.js",
+  "three/addons/": "./vendor/three/examples/jsm/"
 } }
 </script>
 <script type="module">
@@ -4653,14 +4662,22 @@ async function openShare() {
     shareStep = 'base';
     $('#shareTitle').textContent = 'Adresse de votre application';
     $('#shareMsg').textContent = 'Le client ouvre le plan sur votre application en ligne. Collez son adresse une fois (par ex. https://votre-compte.github.io/oravis-3d/) : elle est gardée sur cet appareil.';
-    inp.value = ''; inp.readOnly = false; inp.placeholder = 'https://…github.io/…/'; $('#shareOk').textContent = 'Valider'; inp.focus();
+    inp.value = ''; inp.readOnly = false; inp.placeholder = 'https://…github.io/…/'; $('#shareOk').textContent = 'Valider'; $('#shareSend').hidden = true; inp.focus();
     return;
   }
   shareStep = 'link';
   const url = base.replace(/#.*$/, '') + '#vue=' + (await encodePlan(serialize()));
   $('#shareTitle').textContent = 'Lien client';
-  $('#shareMsg').textContent = `Envoyez ce lien au client (e-mail, SMS, WhatsApp). Il verra le plan « ${evt.name || 'sans nom'} » en 3D et pourra le faire tourner et zoomer, sans pouvoir le modifier. Le lien contient le plan tel qu'il est maintenant : après une modification, créez un nouveau lien.`;
+  $('#shareMsg').textContent = `Envoyez-le au client avec les boutons ci-dessous, ou copiez-le. Il verra le plan « ${evt.name || 'sans nom'} » en 3D et pourra le faire tourner et zoomer, sans pouvoir le modifier. Le lien contient le plan tel qu'il est maintenant : après une modification, créez un nouveau lien.`;
   inp.value = url; inp.readOnly = true; $('#shareOk').textContent = 'Copier le lien'; inp.select();
+  // ready-made message for WhatsApp / e-mail / SMS (opens the app with the text filled in; the user picks the contact)
+  const text = `Bonjour, voici le plan 3D de votre événement${evt.name ? ` « ${evt.name} »` : ''} : vous pouvez le faire tourner et zoomer pour le visualiser.\n${url}`;
+  $('#shareWa').href = 'https://wa.me/?text=' + encodeURIComponent(text);
+  $('#shareMail').href = `mailto:?subject=${encodeURIComponent('Plan 3D de votre événement' + (evt.name ? ' · ' + evt.name : ''))}&body=${encodeURIComponent(text)}`;
+  $('#shareSms').href = 'sms:?&body=' + encodeURIComponent(text);
+  $('#shareNative').hidden = !(navigator.share && !window.claude);
+  $('#shareNative').onclick = () => navigator.share({ title: 'Plan 3D', text, url }).catch(() => {});
+  $('#shareSend').hidden = false;
 }
 $('#btnShare').addEventListener('click', openShare);
 $('#shareClose').addEventListener('click', () => { $('#shareModal').hidden = true; });
