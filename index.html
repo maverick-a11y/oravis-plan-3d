@@ -1326,9 +1326,10 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
   return { geo, hem };
 }
 
-/* Table serpentine: one segment is a 90° ring sector, 91,5 cm wide, 259 cm along the outer edge
-   (outer radius 1,65 m, inner 0,735 m), 77,5 cm high; seats 5 outside + 2 inside. Segments chain end to end. */
-const SERP = { R: 1.65, r: 0.735, H: 0.775 };
+/* Table serpentine: one segment is a 90° ring sector, 91,5 cm wide, 2,60 m in a straight line from one outer tip to
+   the other (outer radius 2,60 / √2 ≈ 1,84 m, inner ≈ 0,92 m), 77,5 cm high; seats 5 outside + 2 inside.
+   Segments chain end to end: each one starts on the end face of the previous one, so they share that edge. */
+const SERP = { R: 2.6 / Math.SQRT2, r: 2.6 / Math.SQRT2 - 0.915, H: 0.775 };
 function ringSector(cx, cz, r0, r1, t0, t1, h, y = 0) {
   const N = 28, pts = [];
   for (let i = 0; i <= N; i++) { const t = t0 + ((t1 - t0) * i) / N; pts.push(new THREE.Vector2(cx + r1 * Math.cos(t), -(cz + r1 * Math.sin(t)))); }
@@ -1343,7 +1344,9 @@ function serpentineSegments(n, shape) {
   let P = [0, 0], Hd = [1, 0];
   const segs = [];
   for (let k = 0; k < n; k++) {
-    const s = shape === 'arc' ? 1 : shape === 'S' ? (k % 2 ? -1 : 1) : (Math.floor(k / 2) % 2 ? -1 : 1);
+    // arc: always the same way (4 make a circle) · vague: turns the other way at every segment (gentle wave)
+    // S: two segments one way (half-circle), two the other way, and so on
+    const s = shape === 'arc' ? 1 : shape === 'vague' ? (k % 2 ? -1 : 1) : (Math.floor(k / 2) % 2 ? -1 : 1);
     const nrm = rot(Hd, PI / 2);
     const C = [P[0] + s * rc * nrm[0], P[1] + s * rc * nrm[1]];
     const t0 = Math.atan2(P[1] - C[1], P[0] - C[0]), t1 = t0 + (s * PI) / 2;
@@ -1352,6 +1355,7 @@ function serpentineSegments(n, shape) {
     P = [C[0] + d[0], C[1] + d[1]];
     Hd = rot(Hd, (s * PI) / 2);
   }
+  segs.end = P;   // centreline end point (the start is at the origin)
   return segs;
 }
 
@@ -2557,7 +2561,8 @@ const KINDS = {
     label: 'Table serpentine', glyph: '∿', color: '#f4f1ea', colorLabel: 'Nappe / plateau',
     opts: {
       count: { label: 'Segments', type: 'select', values: [1, 2, 3, 4, 6, 8, 10, 12], def: 4 },
-      shape: { label: 'Assemblage', type: 'select', values: ['vague', 'S', 'arc'], names: { vague: 'Vague (demi-cercles alternés)', S: 'S (alterné à chaque segment)', arc: 'Arc (même sens)' }, def: 'vague' },
+      shape: { label: 'Assemblage', type: 'select', values: ['S', 'vague', 'arc'], names: { S: 'S (demi-cercles alternés)', vague: 'Vague (alterné à chaque segment)', arc: 'Arc / cercle (même sens)' }, def: 'S' },
+      shapeV: { hidden: true, def: 2 },   // 2 = names fixed (S and vague used to be swapped)
       chairs: { label: 'Chaises (5 + 2 par segment)', type: 'bool', def: true },
       cloth: { label: 'Nappe', type: 'bool', def: true },
       chairModel: CHAIR_MODEL, chairColor: CHAIR_COLOR,
@@ -2566,7 +2571,11 @@ const KINDS = {
       const { R, r, H } = SERP;
       const cm = chairMat(o.chairColor);
       const top = [];
-      for (const { C, t0, t1 } of serpentineSegments(o.count, o.shape)) {
+      // S and vague are laid out straight along the length (x): turn the whole chain so its end lies on the x axis
+      const raw = serpentineSegments(o.count, o.shape), phi = o.shape !== 'arc' && o.count > 1 ? Math.atan2(raw.end[1], raw.end[0]) : 0;
+      const cp = Math.cos(phi), sp = Math.sin(phi);
+      const segs = raw.map(({ C, t0, t1 }) => ({ C: [C[0] * cp + C[1] * sp, -C[0] * sp + C[1] * cp], t0: t0 - phi, t1: t1 - phi }));
+      for (const { C, t0, t1 } of segs) {
         if (o.cloth) top.push(ringSector(C[0], C[1], r - 0.02, R + 0.02, t0, t1, H));
         else {
           top.push(ringSector(C[0], C[1], r, R, t0, t1, 0.03, H - 0.03));
@@ -2585,6 +2594,7 @@ const KINDS = {
       const b = new THREE.Box3().setFromObject(g), c = b.getCenter(new THREE.Vector3());
       for (const ch of g.children) { ch.position.x -= c.x; ch.position.z -= c.z; }
     },
+    migrate(opts, raw) { if (raw.shape && raw.shapeV !== 2) opts.shape = { vague: 'S', S: 'vague' }[raw.shape] || raw.shape; },
     quote: (o) => ({ table_serpentine: o.count, [chairKey(o.chairModel)]: o.chairs ? 7 * o.count : 0, nappe_serpentine: o.cloth ? o.count : 0 }),
   },
   standingIron: {
@@ -3192,8 +3202,10 @@ const CATALOG = [
     { kind: 'tround', label: 'Table ronde + 8 chaises', sub: 'Ø 1,80 m · nappe', opts: { seats: 8 } },
     { kind: 'tround', label: 'Table ronde Ø 150 + 8 chaises', sub: 'Ø 1,50 m · nappe', opts: { diam: 150, seats: 8 } },
     { kind: 'trect', label: 'Table rect. + 6 chaises', sub: '1,80 × 0,76 m' },
-    { kind: 'serpentine', label: 'Table serpentine × 4 (vague)', sub: '4 segments · 28 places · nappe' },
-    { kind: 'serpentine', label: 'Table serpentine (1 segment)', sub: '259 × 91,5 cm · 5 + 2 places', opts: { count: 1 } },
+    { kind: 'serpentine', label: 'Table serpentine × 4 (S)', sub: '4 segments · 28 places · nappe' },
+    { kind: 'serpentine', label: 'Table serpentine × 6 (vague)', sub: '6 segments · 42 places · ondulation', opts: { count: 6, shape: 'vague', shapeV: 2 } },
+    { kind: 'serpentine', label: 'Table serpentine × 4 (cercle)', sub: 'rond Ø 3,68 m · 28 places', opts: { shape: 'arc' } },
+    { kind: 'serpentine', label: 'Table serpentine (1 segment)', sub: '2,60 m de pointe à pointe · 91,5 cm · 5 + 2 places', opts: { count: 1 } },
     { kind: 'tpvc', label: 'Table PVC 200 × 90 + 6 chaises', sub: '2,00 × 0,90 m · h 74 cm · 3 de chaque côté' },
     { kind: 'tpvc', label: 'Table PVC 200 × 90', sub: '2,00 × 0,90 m · plateau blanc · sans chaises', opts: { chairs: 'aucune' } },
     { kind: 'tpvc', label: 'Banquet PVC 4 tables (8 m)', sub: '8 × 0,90 m · 3 par table et par côté + 1 à chaque jonction · 30 places', opts: { tables: 4 } },
@@ -3310,7 +3322,7 @@ const CATALOG = [
 
 const ITEM_DEFS = [
   ['chaise_bistrot', 'Chaise bistrot'], ['chaise_medaillon', 'Chaise médaillon'], ['chaise_fer', 'Chaise fer blanc vieilli (coussin blanc)'], ['chaise_bistrotPliante', 'Chaise pliante bistrot blanche (coussin blanc)'], ['chaise', 'Chaise pliante'], ['gueridon_rotin', 'Guéridon rotin naturel Ø 80 cm'], ['table_ronde_bois', 'Table ronde bois massif Ø 168 cm'], ['table_ronde', 'Table ronde Ø 1,80 m'], ['table_ronde_150', 'Table ronde Ø 1,50 m'], ['nappe_ronde', 'Nappe ronde (Ø 1,80 m)'], ['nappe_ronde_150', 'Nappe ronde (Ø 1,50 m)'],
-  ['table_serpentine', 'Table serpentine (segment 259 × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
+  ['table_serpentine', 'Table serpentine (segment 2,60 m de pointe à pointe × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_m2', 'Piste de danse (m²)'],
   ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
