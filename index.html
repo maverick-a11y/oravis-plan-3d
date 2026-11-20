@@ -4863,7 +4863,7 @@ $('#btnPng').addEventListener('click', () => {
    The planner describes a set-up in words (typed, or spoken through dictation); Claude turns it into products from
    the catalogue with their options and positions; the page checks every value against the catalogue, shows the list,
    and builds it in one step (one Ctrl+Z undoes it). Only in the claude.ai version, where Claude is available. */
-let aiSample = null, aiDict = null, aiPlan = null, aiCtl = null;
+let aiSample = null, aiDict = null, aiPlan = null, aiCtl = null, localVoiceStop = null;
 function aiCatalogue() {
   const lines = [];
   for (const [kind, def] of Object.entries(KINDS)) {
@@ -4925,7 +4925,7 @@ function aiClean(it) {
   }
   if (it.kind === 'serpentine') opts.shapeV = 2;   // shapes named as they are today
   const num = (n, lim) => Math.max(-lim, Math.min(lim, Number.isFinite(+n) ? +n : 0));
-  return { kind: it.kind, name: typeof it.name === 'string' && it.name.trim() ? it.name.trim().slice(0, 40) : null, opts, x: num(it.x, 150), z: num(it.z, 150), rot: num(it.rot, 360), line: String(it.line || def.label).slice(0, 160) };
+  return { kind: it.kind, name: typeof it.name === 'string' && it.name.trim() ? it.name.trim().slice(0, 40) : null, opts, x: num(it.x, 150), z: num(it.z, 150), rot: num(it.rot, 360), line: it.line === '' ? '' : String(it.line || def.label).slice(0, 160) };
 }
 const aiMsg = (code) => ({
   not_granted: 'Claude n\'est pas autorisé pour cet outil : autorisez-le dans le menu Permissions de la page.',
@@ -4945,16 +4945,17 @@ $('#aiGo').addEventListener('click', async () => {
   const request = $('#aiText').value.trim();
   if (!request) { $('#aiStatus').textContent = 'Décrivez d\'abord le plan, à voix haute ou par écrit.'; return; }
   if (aiDict?.active()) await aiDict.stop();
+  localVoiceStop?.();
   aiReset();
   const st = $('#aiStatus'); st.classList.remove('err'); st.textContent = 'Préparation du plan…';
   aiCtl = new AbortController(); $('#aiGo').textContent = 'Arrêter';
   try {
-    const res = await aiSample.json(aiPrompt(request), { signal: aiCtl.signal });
+    const res = aiSample ? await aiSample.json(aiPrompt(request), { signal: aiCtl.signal }) : localParse(request);
     const items = (Array.isArray(res?.items) ? res.items : []).map(aiClean).filter(Boolean).slice(0, 60);
     if (!items.length) { st.textContent = 'Je n\'ai reconnu aucun produit du catalogue dans cette demande : précisez-la.'; return; }
     aiPlan = items;
     $('#aiSummary').textContent = String(res.summary || 'Je vais ajouter :').slice(0, 300);
-    $('#aiList').replaceChildren(...items.map((it) => { const li = document.createElement('li'); li.textContent = it.line; return li; }));
+    $('#aiList').replaceChildren(...items.filter((it) => it.line).map((it) => { const li = document.createElement('li'); li.textContent = it.line; return li; }));
     $('#aiNotes').textContent = String(res.notes || '').slice(0, 400);
     $('#aiResult').hidden = false; $('#aiApply').hidden = false;
     st.textContent = 'Vérifiez la liste, puis validez : tout sera ajouté au plan (Ctrl+Z pour annuler).';
@@ -4976,7 +4977,8 @@ $('#aiApply').addEventListener('click', () => {
   $('#aiModal').hidden = true; $('#aiText').value = ''; aiReset();
 });
 (async () => {
-  if (!window.claude?.use || VIEW) return;
+  if (VIEW) return;
+  if (!window.claude?.use) { setupLocalAssistant(); return; }   // app version: built-in reader + the browser's own dictation
   [aiSample, aiDict] = await Promise.all([use('sample'), use('dictation')]);
   $('#btnAI').hidden = !aiSample;
   if (!aiDict) return;
@@ -4997,6 +4999,159 @@ $('#aiApply').addEventListener('click', () => {
     });
   });
 })();
+
+/* Built-in reader (app version, where Claude is not available): understands the usual ways of asking for the main
+   products — how many, sizes, layout, chair model — and lays them out simply: tables go under the garland or tent,
+   everything else in a row in front. Gives the same kind of list as the Claude assistant, checked the same way. */
+const FR_NUM = { 'vingt-cinq': 25, 'vingt cinq': 25, 'dix-sept': 17, 'dix-huit': 18, 'dix-neuf': 19, cinquante: 50, quarante: 40, trente: 30, vingt: 20, seize: 16, quinze: 15, quatorze: 14, treize: 13, douze: 12, onze: 11, dix: 10, neuf: 9, huit: 8, sept: 7, six: 6, cinq: 5, quatre: 4, trois: 3, deux: 2, une: 1, un: 1 };
+function localParse(raw) {
+  let t = ' ' + fold(raw).replace(/[’'"«»]/g, ' ').replace(/(\d)\s*,\s*(\d)/g, '$1.$2').replace(/\s+/g, ' ') + ' ';
+  for (const [w, n] of Object.entries(FR_NUM)) t = t.replace(new RegExp(`(^|[^a-z])${w}(?=[^a-z]|$)`, 'g'), `$1${n}`);
+  t = t.replace(/(\d+) virgule (\d+)/g, '$1.$2').replace(/(\d+) et demi/g, '$1.5');
+  const N = '(\\d+(?:\\.\\d+)?)', M = '\\s*(?:m|metres?|metre)?';
+  const num = (s, re) => { const m = s.match(re); return m ? +m[1] : null; };
+  const chairOf = (s) => /medaillon/.test(s) ? 'medaillon' : /\bfer\b/.test(s) ? 'fer' : /pliantes? (?:bistrot|blanche)|bistrot pliante/.test(s) ? 'bistrotPliante' : /pliante/.test(s) ? 'pliante' : /bistrot/.test(s) ? 'bistrot' : null;
+  const dims = (s) => { const m = s.match(new RegExp(N + M + '\\s*(?:x|par)\\s*' + N)); return m ? [+m[1], +m[2]] : null; };
+  const parts = t.split(/\s(?:avec|puis|plus|ensuite|ainsi que|et aussi)\s|[,;]|\.\s|\set\s(?=\d|des\s|le\s|la\s|les\s)/).map((x) => ' ' + x.trim() + ' ').filter((x) => x.trim());
+  // a piece that names no product only adds details (« un espacement de 4 m », « en chaises bistrot ») to the product before it
+  const PRODUCT = /guinguette|guirlande|zigzag|ciel etoile|cube|banquet|pvc|\btables?\b|ronde|serpentine|stretch|tente|pagode|piste|plancher|scene|estrade|podium|mange|\bbar\b|comptoir|\bdj\b|platine|boule/;
+  const segs = [];
+  for (const p of parts) { if (PRODUCT.test(p) || !segs.length) segs.push(p); else segs[segs.length - 1] += p; }
+  if (segs.length > 1 && !PRODUCT.test(segs[0])) segs[1] = segs.shift() + segs[1];
+  const out = [], notes = [];
+  const add = (kind, opts, extra = {}) => { out.push({ kind, opts, ...extra }); return out[out.length - 1]; };
+  for (let s of segs) {
+    const counts = [...s.matchAll(/(\d+)\s*(?:x\s*)?(?:tables?|pagodes?|mange|boules?|serpentines?|segments?)/g)].map((m) => +m[1]);
+    const chair = chairOf(s), count = counts.length ? Math.max(...counts) : null;   // « 1 table en banquet de 12 tables » → 12
+    if (/guinguette|guirlande|zigzag/.test(s) && !/lumineuse|ciel|cube|fine/.test(s)) {
+      const o = {};
+      o.layout = /zigzag simple|simple zigzag|quinconce/.test(s) ? 'zigzag-simple' : /zigzag/.test(s) ? 'zigzag' : /quadrill/.test(s) ? 'quadrillage' : /etoile/.test(s) ? 'etoile' : /eventail/.test(s) ? 'eventail' : /echelle/.test(s) ? 'echelle' : /croisillon|croix/.test(s) ? 'croix' : /losange/.test(s) ? 'losanges' : /carrousel|cercle|rond/.test(s) ? 'carrousel' : /contour|autour|perimetre|\btour\b/.test(s) ? 'perimetre' : /ligne droite|en ligne|allee/.test(s) ? 'ligne' : /lignes/.test(s) ? 'lignes' : 'zigzag';
+      const sp = s.match(new RegExp('(?:espacement|ecart|espace|espaces|tous les|poteaux? tous les)\\s*(?:de\\s*|entre (?:les )?poteaux (?:de\\s*)?)?' + N));
+      if (sp) { o.spacing = +sp[1]; s = s.replace(sp[0], ' '); }
+      const d = dims(s);
+      if (d) { o.length = Math.max(...d); o.width = Math.min(...d); }
+      const L = num(s, new RegExp('(?:sur|longueur(?: de)?)\\s*' + N)) ?? num(s, new RegExp(N + M + '\\s*de long'));
+      if (L && !d) o.length = L;
+      const W = num(s, new RegExp(N + M + '\\s*de large')) ?? num(s, new RegExp('largeur\\s*(?:de\\s*)?' + N));
+      if (W) o.width = W;
+      if (/pieu|piquet|pieutage/.test(s)) o.stake = true;
+      add('guinguette', o, { role: 'cover' });
+    } else if (/guirlande|ciel etoile|cube lumineux|cube/.test(s)) {
+      const o = { layout: /cube/.test(s) ? 'cube' : 'ciel' }, d = dims(s);
+      if (d) { o.length = Math.max(...d); o.width = Math.min(...d); }
+      add('fairy', o, { role: 'cover' });
+    } else if (/banquet|pvc|tables? (?:rectangulaires? )?de 2|tables? de 200/.test(s)) {
+      const o = { tables: count || 1 };
+      o.chairs = /sans chaise/.test(s) ? 'aucune' : /bout/.test(s) ? 'tour' : 'cotes';
+      if (/sans jonction|pas aux jonctions/.test(s)) o.junction = false;
+      if (chair) o.chairModel = chair;
+      if (/nappe/.test(s) && !/sans nappe/.test(s)) o.cloth = true;
+      add('tpvc', o, { role: 'table' });
+    } else if (/tables? rondes?|ronde/.test(s)) {
+      const o = { diam: /150|1\.5/.test(s) ? 150 : 180 };
+      const seats = num(s, /(\d+)\s*(?:chaises?|places?|personnes?)\s*(?:par|chacune|autour)/) ?? num(s, /(?:de|a|avec)\s*(\d+)\s*(?:chaises?|places?|personnes?)/);
+      if (seats) o.seats = seats;
+      if (/sans nappe/.test(s)) o.cloth = false;
+      if (chair) o.chairModel = chair;
+      for (let i = 0; i < Math.min(40, count || 1); i++) add('tround', { ...o }, { role: 'table', group: 'round' });
+    } else if (/serpentine/.test(s)) {
+      const o = { count: count || 4, shape: /vague/.test(s) ? 'vague' : /cercle|rond|\barc\b/.test(s) ? 'arc' : 'S' };
+      if (/sans chaise/.test(s)) o.chairs = false;
+      if (chair) o.chairModel = chair;
+      add('serpentine', o, { role: 'table' });
+    } else if (/stretch|tente tendue/.test(s)) {
+      const d = dims(s) || [15, 10.5], a = Math.max(...d), b = Math.min(...d);
+      const key = Object.keys(STRETCH).sort((p, q) => { const f = (k) => { const [x, y] = k.split('x').map(Number); return Math.abs(Math.max(x, y) - a) + Math.abs(Math.min(x, y) - b); }; return f(p) - f(q); })[0];
+      add('stretch', { size: key }, { role: 'cover' });
+    } else if (/pagode/.test(s)) {
+      const o = { walls: /3 cotes/.test(s) ? 'trois' : /4 cotes|fermee/.test(s) ? 'quatre' : /fond/.test(s) ? 'fond' : 'aucun' };
+      for (let i = 0; i < Math.min(12, count || 1); i++) add('pagode', { ...o }, { role: 'cover', group: 'pagode' });
+    } else if (/piste/.test(s)) {
+      const d = dims(s), c = num(s, new RegExp(N + M)), o = {};
+      if (d) { o.length = Math.max(...d); o.width = Math.min(...d); } else if (c) { o.length = o.width = c; }
+      o.pattern = /parquet|bois/.test(s) ? 'parquet' : /chevron/.test(s) ? 'chevrons' : /etoile/.test(s) ? 'etoiles' : /marbre/.test(s) ? 'marbre' : /uni|noire|blanche/.test(s) ? 'uni' : 'damier';
+      add('dance', o, { role: 'other' });
+    } else if (/plancher/.test(s)) {
+      const d = dims(s), o = {};
+      if (d) { o.length = Math.max(...d); o.width = Math.min(...d); }
+      if (/pmr|rampe/.test(s)) o.ramp = true;
+      add('plancher', o, { role: 'cover' });
+    } else if (/scene|estrade|podium/.test(s)) {
+      const d = dims(s), o = {};
+      if (d) { o.width = Math.max(...d); o.depth = Math.min(...d); }
+      const h = num(s, /(\d+)\s*cm/); if (h) o.height = h;
+      add('stage', o, { role: 'other' });
+    } else if (/mange.?debout|table haute/.test(s)) {
+      for (let i = 0; i < Math.min(30, count || num(s, /(\d+)/) || 1); i++) add(/fer/.test(s) ? 'standingIron' : 'standing', {}, { role: 'other', group: 'standing' });
+    } else if (/\bbar\b|comptoir/.test(s)) add(/zinc|bois/.test(s) ? 'barZinc' : 'bar', {}, { role: 'other' });
+    else if (/\bdj\b|platine|mixage/.test(s)) add('dj', {}, { role: 'other' });
+    else if (/boule/.test(s)) add('disco', { size: num(s, /(\d+)\s*cm/) || 30 }, { role: 'other' });
+    else if (chair && out.length && ['tpvc', 'tround', 'serpentine'].includes(out[out.length - 1].kind)) {
+      for (const it of out) if (it.role === 'table') it.opts.chairModel = chair;   // « … et des chaises médaillon »
+    } else if (s.trim().length > 2) notes.push(`pas compris : « ${s.trim()} »`);
+  }
+  // simple layout: covers (garland, tent, floor) at the centre, tables under them, the rest in a row in front
+  const fp = (it) => { const o = it.opts; switch (it.kind) {
+    case 'guinguette': return [o.length || 12, o.width || 6]; case 'fairy': return [o.length || 10, o.width || 8];
+    case 'stretch': { const T = STRETCH[o.size]; return [T.L, T.W]; } case 'plancher': return [o.length || 10, o.width || 6];
+    case 'pagode': return [5, 5]; case 'dance': return [o.length || 5, o.width || 5]; case 'stage': return [o.width || 4, o.depth || 3];
+    case 'dj': return [2.4, 1.6]; case 'bar': return [2.1, 0.7]; case 'barZinc': return [1.8, 0.5];
+    default: return [1, 1]; } };
+  const covers = out.filter((i) => i.role === 'cover'), tables = out.filter((i) => i.role === 'table'), others = out.filter((i) => i.role === 'other');
+  let depth = 0;
+  const pag = covers.filter((i) => i.group === 'pagode');
+  pag.forEach((it, i) => { it.x = (i - (pag.length - 1) / 2) * 5.5; it.z = 0; });
+  covers.filter((i) => i.group !== 'pagode').forEach((it) => { it.x = 0; it.z = 0; });
+  for (const it of covers) depth = Math.max(depth, fp(it)[1]);
+  const rounds = tables.filter((i) => i.group === 'round');
+  if (rounds.length) {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(rounds.length * 1.6))), rows = Math.ceil(rounds.length / cols), sp = 3.6;
+    rounds.forEach((it, i) => { it.x = ((i % cols) - (cols - 1) / 2) * sp; it.z = (Math.floor(i / cols) - (rows - 1) / 2) * sp; });
+    depth = Math.max(depth, rows * sp);
+  }
+  tables.filter((i) => i.group !== 'round').forEach((it, i) => { it.x = 0; it.z = i * 3; depth = Math.max(depth, 2.4 + i * 3); });
+  let x = 0, row = [];
+  for (const it of others) { const [w] = fp(it); row.push([it, w]); x += w + 1.5; }
+  let cx = -(x - 1.5) / 2, maxD = 0;
+  for (const [it, w] of row) { const d = fp(it)[1]; it.x = cx + w / 2; it.z = depth / 2 + 2.5 + d / 2; cx += w + 1.5; maxD = Math.max(maxD, d); }
+  // one readable line per product, from the catalogue's own names
+  const lineOf = (it) => {
+    const def = KINDS[it.kind], parts = [];
+    for (const [k, v] of Object.entries(it.opts)) { const d = def.opts?.[k]; if (!d || d.hidden || d.type === 'color') continue; parts.push(d.type === 'bool' ? (v ? d.label : `sans ${d.label.toLowerCase()}`) : `${d.label.toLowerCase()} ${d.names?.[v] ?? v}${d.suffix || ''}`); }
+    return def.label + (parts.length ? ' · ' + parts.join(', ') : '');
+  };
+  const groups = new Map();
+  for (const it of out) { it.rot = 0; const l = lineOf(it); groups.set(l, (groups.get(l) || 0) + 1); it.line = l; }
+  const shown = new Set();
+  for (const it of out) { const n = groups.get(it.line); if (n > 1) { if (shown.has(it.line)) it.line = ''; else { shown.add(it.line); it.line = `${n} × ${it.line}`; } } }
+  return { summary: out.length ? 'Je vais ajouter :' : '', items: out, notes: notes.join(' · '), local: true };
+}
+function setupLocalAssistant() {
+  $('#btnAI').hidden = false;
+  $('#aiModal .note').textContent = 'Dites ou écrivez ce que vous voulez installer. Exemple : « Guirlande guinguette en zigzag, écart 4 m, sur 25 m, avec un banquet de 12 tables en chaises bistrot ». Cette version comprend les demandes courantes ; sur claude.ai, l\'assistant Claude comprend les phrases plus libres.';
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  const mic = $('#aiMic'), rec = new SR();
+  rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = true;
+  let on = false;
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) { const t = $('#aiText'); t.value += (t.value && !/\s$/.test(t.value) ? ' ' : '') + r[0].transcript.trim(); aiReset(); }
+      else interim += r[0].transcript;
+    }
+    $('#aiPartial').textContent = interim;
+  };
+  rec.onend = () => { on = false; mic.classList.remove('listening'); mic.title = 'Dicter'; $('#aiPartial').textContent = ''; };
+  rec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { mic.hidden = true; $('#aiStatus').textContent = 'Micro refusé : autorisez-le dans le navigateur, ou écrivez la demande.'; } };
+  localVoiceStop = () => { if (on) rec.stop(); };
+  mic.hidden = false;
+  mic.addEventListener('click', () => {
+    if (on) { rec.stop(); return; }
+    try { rec.start(); on = true; mic.classList.add('listening'); mic.title = 'Arrêter la dictée'; } catch (e) {}
+  });
+}
 
 /* ---------- Client link ----------
    The whole plan travels inside the link (compressed after "#vue="), so the client opens it in any browser and can
