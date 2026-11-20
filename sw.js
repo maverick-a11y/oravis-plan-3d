@@ -1,7 +1,7 @@
 // Oravis Plan Événement 3D — offline support.
 // The app shell, the 3D engine and the fonts (all served from this site, see vendor/) are cached on install,
 // so the app works without a connection from the first visit. Bump VERSION on every update to refresh the cache.
-const VERSION = 'oravis-3d-20261120163219';
+const VERSION = 'oravis-3d-20261120170604';
 const VENDOR = ['./vendor/fonts/fonts.css', './vendor/fonts/geist-gyByhwUxId8gMEwSGFWNOITddY4.woff2', './vendor/fonts/geist-gyByhwUxId8gMEwcGFWNOITd.woff2', './vendor/fonts/geistmono-or3nQ6H-1_WfwkMZI_qYFrcdmhHkjko.woff2', './vendor/fonts/geistmono-or3nQ6H-1_WfwkMZI_qYFrkdmhHkjkotbA.woff2', './vendor/three/build/three.module.js', './vendor/three/examples/jsm/controls/OrbitControls.js', './vendor/three/examples/jsm/controls/TransformControls.js', './vendor/three/examples/jsm/environments/RoomEnvironment.js', './vendor/three/examples/jsm/postprocessing/EffectComposer.js', './vendor/three/examples/jsm/postprocessing/MaskPass.js', './vendor/three/examples/jsm/postprocessing/OutputPass.js', './vendor/three/examples/jsm/postprocessing/Pass.js', './vendor/three/examples/jsm/postprocessing/RenderPass.js', './vendor/three/examples/jsm/postprocessing/ShaderPass.js', './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js', './vendor/three/examples/jsm/shaders/CopyShader.js', './vendor/three/examples/jsm/shaders/LuminosityHighPassShader.js', './vendor/three/examples/jsm/shaders/OutputShader.js', './vendor/three/examples/jsm/utils/BufferGeometryUtils.js'];
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', ...VENDOR];
 

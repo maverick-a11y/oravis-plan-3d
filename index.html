@@ -401,6 +401,7 @@ body.viewer .vp-tag { left: 16px; }
           <option value="salle">Salle</option>
           <option value="jardin">Jardin / extérieur</option>
           <option value="aucun">Sans sol</option>
+          <optgroup label="Lieux modélisés"><option value="martinay">Château Martinay</option></optgroup>
         </select>
         <input id="roomW" type="number" min="4" max="200" step="1" aria-label="Largeur du lieu en mètres">×
         <input id="roomD" type="number" min="4" max="200" step="1" aria-label="Profondeur du lieu en mètres">m
@@ -3526,6 +3527,133 @@ let room = { type: 'salle', w: 20, d: 14 };
 let evt = { name: '', date: '' };
 const FLOOR = { salle: '#cdb999', jardin: '#7da463' };
 
+/* ---------- Venues modelled from aerial views and photos ----------
+   Each venue is built in metres around the place where tents usually go (the origin). Shapes are traced on the
+   aerial view in pixels and converted with the view's scale; buildings are simplified volumes at the right size. */
+function venueFacade(w, h, opts) {
+  // Stone façade with rows of shuttered windows (one canvas per wall), 24 px per metre.
+  const ppm = 24, c = document.createElement('canvas'); c.width = Math.round(w * ppm); c.height = Math.round(h * ppm);
+  const x = c.getContext('2d'), { stone, shutter, rows, bays, arch } = opts;
+  x.fillStyle = stone; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = 'rgba(0,0,0,0.05)'; for (let i = 0; i < c.height; i += 14) x.fillRect(0, i, c.width, 1);   // stone courses
+  const bw = c.width / bays;
+  for (const [y0, wh, small] of rows) {
+    const top = c.height - (y0 + wh) * ppm, hh = wh * ppm;
+    for (let b = 0; b < bays; b++) {
+      const cx = (b + 0.5) * bw, ww = (small ? 0.8 : 1.15) * ppm;
+      x.fillStyle = '#2f3a44'; x.fillRect(cx - ww / 2, top, ww, hh);
+      if (arch && !small && b >= (bays - 3) / 2 && b < (bays + 3) / 2 && y0 > 3 && y0 < 6) { x.beginPath(); x.arc(cx, top, ww / 2, PI, 0); x.fill(); }
+      x.fillStyle = 'rgba(255,255,255,0.55)'; x.fillRect(cx - 1, top, 2, hh); x.fillRect(cx - ww / 2, top + hh * 0.45, ww, 2);
+      if (!small) { x.fillStyle = shutter; x.fillRect(cx - ww / 2 - ww * 0.42, top, ww * 0.38, hh); x.fillRect(cx + ww / 2 + ww * 0.04, top, ww * 0.38, hh); }
+    }
+  }
+  x.fillStyle = 'rgba(0,0,0,0.12)'; x.fillRect(0, 0, c.width, 0.5 * ppm);   // cornice shadow
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
+}
+function hipRoof(w, d, h, mat) {
+  // Four-sided roof over a w × d block: ridge along the longer side.
+  const r = Math.min(w, d) / 2, rx = w / 2 - r, rz = d / 2 - r;
+  const v = [[-w / 2, 0, -d / 2], [w / 2, 0, -d / 2], [w / 2, 0, d / 2], [-w / 2, 0, d / 2], [-rx, h, -rz], [rx, h, -rz], [rx, h, rz], [-rx, h, rz]];
+  const faces = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]], pos = [];
+  for (const [a, b, c2, e] of faces) for (const k of [a, c2, b, a, e, c2]) pos.push(...v[k]);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); m.material.side = THREE.DoubleSide; return m;
+}
+function venueBlock(group, { x, z, w, d, h, roofH, rot = 0, facade, side, roofMat }) {
+  const b = new THREE.Group(); b.position.set(x, 0, z); b.rotation.y = rot;
+  const plain = new THREE.MeshStandardMaterial({ color: '#e2d8c6', roughness: 0.9 });
+  const mats = [side || plain, side || plain, plain, plain, facade || plain, facade || plain];   // +x, -x, top, bottom, +z (front), -z (back)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats); body.position.y = h / 2; b.add(body);
+  const roof = hipRoof(w + 0.6, d + 0.6, roofH, roofMat); roof.position.y = h; b.add(roof);
+  group.add(b); return b;
+}
+const VENUES = {
+  martinay: {
+    name: 'Château Martinay',
+    // traced on the aerial view: 0,14 m per pixel, origin at the middle of the front forecourt (pixel 400, 820)
+    w: 124, d: 144,
+    build(G) {
+      const S = 0.14, P = ([px, py]) => [(px - 400) * S, (py - 820) * S];
+      const flat = (pts, mat, y) => {
+        const sh = new THREE.Shape(pts.map(P).map(([a, b]) => new THREE.Vector2(a, -b)));
+        const m = new THREE.Mesh(new THREE.ShapeGeometry(sh).rotateX(-PI / 2), mat); m.position.y = y; m.receiveShadow = true; G.add(m); return m;
+      };
+      const mat = (c, r = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: r, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      // ground: park undergrowth, gravel forecourt, rear courtyard and drives, lawn
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(124.3, 144.2).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#5f6e3f', roughness: 1 }));
+      ground.position.set((444 - 400) * S, -0.01, (515 - 820) * S); ground.receiveShadow = true; G.add(ground);
+      const gravel = mat('#d9cfb9'), lawnM = mat('#7f9a4f');
+      const FORECOURT = [[0, 742], [265, 735], [280, 745], [575, 745], [610, 760], [575, 870], [555, 960], [515, 1030], [425, 1030], [385, 945], [250, 895], [110, 868], [0, 862]];
+      const LAWN = [[0, 872], [235, 897], [372, 955], [412, 1030], [0, 1030]];
+      const COURT = [[300, 140], [430, 125], [560, 145], [705, 225], [660, 560], [300, 560]];
+      const DRIVE_N = [[430, 0], [560, 0], [565, 150], [430, 150]];
+      const PATH_W = [[178, 60], [228, 60], [300, 470], [300, 742], [262, 742], [250, 470]];
+      const PATH_E = [[600, 560], [660, 560], [650, 745], [600, 745]];
+      for (const p of [FORECOURT, COURT, DRIVE_N, PATH_W, PATH_E]) flat(p, gravel, 0.005);
+      flat(LAWN, lawnM, 0.01);
+      // château: main block 41 × 18 m, cornice at 15 m, hipped roof, belvedere; raised terrace with stairs at both ends
+      const stone = '#e4d7bf', roofMat = new THREE.MeshStandardMaterial({ color: '#a97a5e', roughness: 0.9 });
+      const [cx, cz] = P([426, 630]), W = 41, D = 18, H = 15;
+      const rows = [[1.2, 2.2], [4.6, 3.0], [9.0, 2.6], [12.8, 1.0, true]];
+      venueBlock(G, { x: cx, z: cz, w: W, d: D, h: H, roofH: 4, roofMat,
+        facade: venueFacade(W, H, { stone, shutter: '#d9d3c7', rows, bays: 13, arch: true }),
+        side: venueFacade(D, H, { stone, shutter: '#d9d3c7', rows, bays: 5 }) });
+      const bel = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), new THREE.MeshStandardMaterial({ color: stone, roughness: 0.85 })); bel.position.set(cx, H + 4.2, cz); G.add(bel);
+      const belRoof = hipRoof(4.4, 4.4, 1.6, roofMat); belRoof.position.set(cx, H + 5.7, cz); G.add(belRoof);
+      const stoneM = new THREE.MeshStandardMaterial({ color: '#ddd3c0', roughness: 0.9 }), rail = [];
+      for (const [w, d, x, z] of [[W + 0.4, 0.3, cx, cz + D / 2], [W + 0.4, 0.3, cx, cz - D / 2], [0.3, D, cx + W / 2, cz], [0.3, D, cx - W / 2, cz]]) rail.push(new THREE.BoxGeometry(w, 0.9, d).translate(x, H + 0.45, z));
+      const tz = cz + D / 2 + 2.5, TW = 26, TH = 2.6;   // terrace in front of the main floor
+      rail.push(new THREE.BoxGeometry(TW, TH, 5).translate(cx, TH / 2, tz));
+      rail.push(new THREE.BoxGeometry(TW, 0.9, 0.25).translate(cx, TH + 0.45, tz + 2.4));
+      for (const sx of [-1, 1]) for (let k = 0; k < 13; k++) {   // stairs at both ends, down toward the forecourt
+        const sh = TH - (k + 1) * 0.2;
+        if (sh > 0) rail.push(new THREE.BoxGeometry(3, sh, 0.3).translate(cx + sx * (TW / 2 - 1.5), sh / 2, tz + 2.5 + 0.15 + k * 0.3));
+      }
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.05), new THREE.MeshStandardMaterial({ color: '#3a3f44' })); door.position.set(cx, 1.1, tz + 2.53); G.add(door);
+      G.add(new THREE.Mesh(mergeLocal(rail), stoneM));
+      // outbuildings around the rear courtyard
+      const outF = venueFacade(16, 7, { stone: '#e2d6c0', shutter: '#cfc6b5', rows: [[1, 2.2], [4.2, 1.8]], bays: 5 });
+      for (const [px, py, w, d] of [[382, 220, 16, 18], [632, 282, 16, 19]]) { const [x, z] = P([px, py]); venueBlock(G, { x, z, w, d, h: 7, roofH: 3, roofMat, facade: outF, side: outF }); }
+      { const [x, z] = P([297, 380]); venueBlock(G, { x, z, w: 9, d: 31, h: 6, roofH: 2.5, roofMat }); }
+      // gardens: knot garden (two hedge rings), beds in front of the terrace, hedges round the lawn
+      const hedge = new THREE.MeshStandardMaterial({ color: '#3f6b2f', roughness: 0.95 }), hedges = [];
+      { const [x, z] = P([195, 725]); for (const r of [5.6, 3.4]) hedges.push(new THREE.TorusGeometry(r, 0.4, 6, 48).rotateX(PI / 2).scale(1, 1.4, 1).translate(x, 0.45, z)); }
+      for (const sx of [-1, 1]) hedges.push(new THREE.BoxGeometry(8, 0.9, 2.6).translate(cx + sx * 6, 0.45, tz + 4.4));
+      for (let i = 0; i < LAWN.length - 2; i++) { const [a, b] = [P(LAWN[i]), P(LAWN[i + 1])]; hedges.push(stick([a[0], 0.4, a[1]], [b[0], 0.4, b[1]], 0.45, 0.45, 6)); }
+      G.add(new THREE.Mesh(mergeLocal(hedges), hedge));
+      // rear courtyard: planted square bed behind the château with a round stone basin in the middle
+      { const [x, z] = P([445, 462]);
+        const bed = new THREE.Mesh(new THREE.BoxGeometry(10, 0.12, 9), new THREE.MeshStandardMaterial({ color: '#59603f', roughness: 1 })); bed.position.set(x, 0.06, z); G.add(bed);
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 0.5, 40, 1, true), new THREE.MeshStandardMaterial({ color: '#cfc5b2', roughness: 0.9, side: THREE.DoubleSide })); rim.position.set(x, 0.25, z); G.add(rim);
+        const water = new THREE.Mesh(new THREE.CircleGeometry(2.25, 40).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#5d7b80', roughness: 0.2, metalness: 0.2 })); water.position.set(x, 0.4, z); G.add(water);
+        const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 0.9, 12), new THREE.MeshStandardMaterial({ color: '#cfc5b2' })); jet.position.set(x, 0.45, z); G.add(jet); }
+      // trees: the park all around (instanced), the two big courtyard trees, cypresses by the façade
+      const clear = [FORECOURT, LAWN, COURT, DRIVE_N, PATH_W, PATH_E].map((p) => p.map(P));
+      const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > pt[1]) !== (zj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - zi)) / (zj - zi) + xi) c = !c; } return c; };
+      const blocked = (pt) => clear.some((p) => inside(pt, p)) || Math.hypot(pt[0] - cx, pt[1] - cz) < 26;
+      const rnd = seeded(77), trees = [];
+      for (let px = 10; px < 888; px += 48) for (let py = 10; py < 1030; py += 48) {
+        const pt = P([px + (rnd() - 0.5) * 30, py + (rnd() - 0.5) * 30]);
+        if (!blocked(pt)) trees.push([pt[0], pt[1], 3.2 + rnd() * 2.2, 7 + rnd() * 5]);
+      }
+      for (const [px, py, r] of [[390, 390, 9], [565, 440, 9.5], [60, 850, 3]]) { const [x, z] = P([px, py]); trees.push([x, z, r, r + 6]); }
+      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#3d5a2c', roughness: 1, flatShading: true }), trees.length);
+      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+      trees.forEach(([x, z, r, h], i) => {
+        canopy.setMatrixAt(i, m4.compose(v.set(x, h - r * 0.6, z), q, sc.set(r, r * 0.85, r)));
+        trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
+      });
+      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      const cyp = [];
+      for (const [px, py] of [[590, 770], [602, 800], [614, 832], [262, 700], [252, 724]]) { const [x, z] = P([px, py]); cyp.push(new THREE.ConeGeometry(1.1, 12, 8).translate(x, 6.6, z), new THREE.SphereGeometry(1.1, 8, 6).translate(x, 0.8, z)); }
+      const cm = new THREE.Mesh(mergeLocal(cyp), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
+      G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
+    },
+  },
+};
+
 function label(text) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 72;
   const x = c.getContext('2d');
@@ -3543,9 +3671,11 @@ const fmtM = (n) => String(n).replace('.', ',');
 function buildRoom() {
   roomGroup.traverse((c) => { c.geometry?.dispose(); if (c.material) { c.material.map?.dispose(); c.material.dispose(); } });
   roomGroup.clear();
+  if (VENUES[room.type]) Object.assign(room, { w: VENUES[room.type].w, d: VENUES[room.type].d });
   const { type, w, d } = room;
   catcher.visible = type === 'aucun';
-  if (type !== 'aucun') {
+  if (VENUES[type]) VENUES[type].build(roomGroup);
+  else if (type !== 'aucun') {
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), new THREE.MeshStandardMaterial({ color: FLOOR[type], roughness: 0.85 }));
     floor.position.y = -0.02; floor.receiveShadow = true;
     roomGroup.add(floor);
@@ -3569,7 +3699,8 @@ function buildRoom() {
   }
   const s = Math.max(w, d) / 2 + 6;
   if (scene.fog) { scene.fog.near = Math.max(60, s * 2); scene.fog.far = Math.max(190, s * 5); }   // big venues stay clear of the haze
-  Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, far: 80 });
+  Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, far: Math.max(80, s * 4) });
+  sun.position.set(8, 16, 6).setLength(Math.max(19, s * 1.6));   // far enough above tall venues
   sun.shadow.camera.updateProjectionMatrix();
   $('#roomType').value = type;
   setVal('#roomW', w); setVal('#roomD', d);
@@ -3719,7 +3850,7 @@ function load(data) {
   [...objects].forEach(removeObject);
   const items = Array.isArray(data) ? data : (data?.items || []);
   if (!Array.isArray(data) && data) {
-    if (data.room && FLOOR[data.room.type] !== undefined || data.room?.type === 'aucun') room = { type: data.room.type, w: +data.room.w || 20, d: +data.room.d || 14 };
+    if (data.room && (FLOOR[data.room.type] !== undefined || VENUES[data.room.type]) || data.room?.type === 'aucun') room = { type: data.room.type, w: +data.room.w || 20, d: +data.room.d || 14 };
     evt = { name: data.event?.name || '', date: data.event?.date || '' };
   }
   buildRoom();
