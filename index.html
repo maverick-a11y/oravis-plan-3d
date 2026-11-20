@@ -434,7 +434,7 @@ body.viewer .vp-tag { left: 16px; }
       <span class="savestate" id="saveState"></span>
       <button class="btn" type="button" id="btnAI" hidden title="Décrire un plan à voix haute ou par écrit"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span class="lbl">Assistant</span></button>
       <button class="btn" type="button" id="btnShare" title="Créer un lien pour que le client voie le plan en 3D"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg><span class="lbl">Lien client</span></button>
-      <button class="btn primary" type="button" id="btnSave" title="Enregistrer dans la bibliothèque de l'équipe (Ctrl+S)">Enregistrer</button>
+      <button class="btn primary" type="button" id="btnSave" hidden title="Enregistrer dans la bibliothèque de l'équipe (Ctrl+S)">Enregistrer</button>
     </div>
   </header>
 
@@ -4650,10 +4650,38 @@ function updateSaveState() {
   if (!el) return;
   const dirty = !currentId || planKey() !== savedKey;
   el.classList.toggle('dirty', !!currentId && dirty);
-  el.textContent = !db ? '' : !currentId ? 'Pas encore dans la bibliothèque' : dirty ? 'Modifications non enregistrées' : 'Enregistré';
-  $('#btnSave').disabled = !db || canWrite === false;
+  el.textContent = !db && !localMode ? '' : !currentId ? `Pas encore dans ${localMode ? 'Mes plans' : 'la bibliothèque'}` : dirty ? 'Modifications non enregistrées' : 'Enregistré';
+  $('#btnSave').disabled = !(db || localMode) || canWrite === false;
 }
 
+/* « Mes plans » (app version, no team library): plans saved under names in this device's browser storage. */
+const LOCAL_LIB = STORE + '.library';
+let localMode = false;
+function localLoad() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(LOCAL_LIB)) || []; } catch (e) {}
+  libDocs = list.filter((p) => p && p.id).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map((p) => ({ id: p.id, exists: true, data: () => p }));
+}
+function localStoreAll(list) { localStorage.setItem(LOCAL_LIB, JSON.stringify(list)); }
+function localSave(asCopy) {
+  const now = new Date().toISOString(), list = libDocs.map((d) => d.data());
+  let p = !asCopy && currentId ? list.find((x) => x.id === currentId) : null;
+  if (!p) {
+    if (asCopy) { evt.name = (evt.name || 'Plan sans nom') + ' (copie)'; setVal('#evName', evt.name); }
+    p = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), createdAt: now };
+    list.push(p);
+  }
+  const s = serialize();
+  Object.assign(p, { name: evt.name || 'Plan sans nom', date: evt.date || '', room: s.room, items: s.items, updatedAt: now });
+  try { localStoreAll(list); } catch (e) { return toast('Mémoire de l\'appareil pleine : supprimez d\'anciens plans ou exportez-les.'); }
+  currentId = p.id;
+  localLoad();
+  savedKey = planKey();
+  saveMeta();
+  refresh();
+  renderLib();
+  toast(asCopy ? 'Copie enregistrée dans Mes plans' : 'Plan enregistré dans Mes plans, sur cet appareil');
+}
 function errMsg(e) {
   if (e?.code === 'quota_exceeded') return 'La bibliothèque est pleine : supprimez d\'anciens plans pour en ajouter.';
   if (e?.code === 'invalid_argument') return 'Enregistrement refusé : votre accès ne permet pas de modifier la bibliothèque.';
@@ -4661,6 +4689,7 @@ function errMsg(e) {
 }
 
 async function savePlan(asCopy = false) {
+  if (localMode) return localSave(asCopy);
   if (!db) return toast('Bibliothèque indisponible : ouvrez l\'outil depuis claude.ai avec votre compte Oravis.');
   if (canWrite === false) return toast('Votre accès est en lecture seule : demandez un accès Contributeur.');
   const s = serialize();
@@ -4718,10 +4747,11 @@ function openPlan(d) {
 
 const delArmed = new Set();
 async function renderLib() {
-  if (!db) return;
+  if (!db && !localMode) return;
   const ul = $('#libList');
   $('#libCount').textContent = libDocs.length || '';
-  $('#libStatus').textContent = !libReady ? 'Chargement des plans de l\'équipe…'
+  $('#libStatus').textContent = localMode ? (libDocs.length ? `${libDocs.length} plan${libDocs.length > 1 ? 's' : ''} enregistré${libDocs.length > 1 ? 's' : ''} sur cet appareil, du plus récent au plus ancien. Pour en envoyer un à un collègue : ouvrez-le, puis « Exporter ».` : 'Aucun plan enregistré sur cet appareil. Cliquez sur « Enregistrer » pour garder le plan en cours ici.')
+    : !libReady ? 'Chargement des plans de l\'équipe…'
     : libDocs.length ? `${libDocs.length} plan${libDocs.length > 1 ? 's' : ''} partagé${libDocs.length > 1 ? 's' : ''} avec l'équipe, du plus récent au plus ancien.`
     : 'Aucun plan partagé pour l\'instant. Cliquez sur « Enregistrer » pour ajouter le plan en cours à la bibliothèque de l\'équipe.';
   const ids = [...new Set(libDocs.map((d) => d.data().updatedBy).filter(Boolean))];
@@ -4736,7 +4766,7 @@ async function renderLib() {
     const name = document.createElement('b'); name.textContent = b.name || 'Plan sans nom';
     const by = b.updatedBy ? (ps[b.updatedBy]?.isMe ? 'vous' : ps[b.updatedBy]?.name || 'un collègue') : 'un collègue';
     const lm = document.createElement('span'); lm.className = 'lm';
-    lm.textContent = `${evDate(b.date)} · ${planStats(b.items)} places · modifié par ${by} le ${fmtDate(b.updatedAt)}`;
+    lm.textContent = `${evDate(b.date)} · ${planStats(b.items)} places · ${localMode ? 'enregistré' : `modifié par ${by}`} le ${fmtDate(b.updatedAt)}`;
     head.append(name, lm);
     const act = document.createElement('div'); act.className = 'act';
     const op = document.createElement('button'); op.type = 'button'; op.className = 'btn';
@@ -4752,9 +4782,10 @@ async function renderLib() {
         if (!delArmed.has(d.id)) { delArmed.add(d.id); renderLib(); setTimeout(() => { delArmed.delete(d.id); renderLib(); }, 3000); return; }
         delArmed.delete(d.id);
         try {
-          await db.doc('plans/' + d.id).delete();
+          if (localMode) { localStoreAll(libDocs.filter((x) => x.id !== d.id).map((x) => x.data())); localLoad(); renderLib(); }
+          else await db.doc('plans/' + d.id).delete();
           if (currentId === d.id) { currentId = null; savedKey = null; saveMeta(); refresh(); }
-          toast(`« ${b.name || 'Plan'} » supprimé de la bibliothèque`);
+          toast(`« ${b.name || 'Plan'} » supprimé ${localMode ? 'de Mes plans' : 'de la bibliothèque'}`);
         } catch (e) { toast('Suppression refusée : votre accès ne le permet pas.'); }
       });
       act.append(del);
@@ -4801,11 +4832,21 @@ $('#btnPng').addEventListener('click', () => {
     $('#libStatus').textContent = window.claude
       ? 'Bibliothèque partagée indisponible ici. Ouvrez l\'outil depuis claude.ai, connecté avec votre compte Oravis.'
       : 'Version application : vos plans restent sur cet appareil. Utilisez « Exporter » pour envoyer un plan à un collègue, et « Importer » pour ouvrir celui qu\'on vous envoie.';
-    if (!window.claude) $('#btnSave').hidden = true;
+    if (!window.claude) {
+      // app version: « Mes plans », a library kept on this device
+      localMode = true;
+      $('#tLib').firstChild.textContent = 'Mes plans ';
+      $('#btnSave').title = 'Enregistrer dans Mes plans, sur cet appareil (Ctrl+S)';
+      $('#btnSave').hidden = false; $('#btnSaveCopy').hidden = false;
+      localLoad(); libReady = true; renderLib(); updateSaveState();
+      return;
+    }
+    $('#btnSave').hidden = false;
     $('#btnSaveCopy').hidden = true;
     updateSaveState();
     return;
   }
+  $('#btnSave').hidden = false;
   $('#btnSaveCopy').hidden = canWrite === false;
   db.collection('plans').orderBy('updatedAt', 'desc').onSnapshot((snap) => {
     libDocs = snap.docs.filter((d) => d.exists);
