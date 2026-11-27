@@ -857,16 +857,17 @@ const STRETCH = {
   '21x10.5': { name: '10,5 × 21 m', L: 21, W: 10.5, sx: 4.2, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-5, 0], [0, 0], [5, 0]] },
   '21x15': { name: '21 × 15 m', L: 21, W: 15, sx: 4.2, sz: 3, H: 3, peak: 4.5, R: 4.8, peaks: [[-5, -2.5], [0, -2.5], [5, -2.5], [-5, 2.5], [0, 2.5], [5, 2.5]] },
 };
-/* Short sides: with closed corners only one pole, in the middle (see stretchT).
+/* Short sides: with crystal walls on a short side only one pole, in the middle (see stretchT).
    Stretch tent made to measure (size "mesure"): any length × width in 50 cm steps and the edge height chosen;
    perimeter poles evenly spaced at most 4,5 m apart, centre masts about every 7 m along the length (two rows from
    12 m wide), masts 1 m above the edge (1,5 m with two rows). */
 function stretchT(o) {
-  // with the corners down to the ground the short sides keep a single pole, in the middle
-  if (o.size !== 'mesure') { const T = STRETCH[o.size] || STRETCH['15x10.5']; return o.corners === 'fermes' ? { ...T, sz: T.W / 2 } : T; }
+  // crystal walls on a short side (corners down to the ground): the short sides keep a single pole, in the middle
+  const mid = o.corners === 'fermes' && (o.crL || o.crR);
+  if (o.size !== 'mesure') { const T = STRETCH[o.size] || STRETCH['15x10.5']; return mid ? { ...T, sz: T.W / 2 } : T; }
   const L = +o.mL || 15, W = +o.mW || 10.5, H = +o.mH || 3, nx = Math.max(1, Math.round(L / 7)), nz = W > 12 ? 2 : 1, peaks = [];
   for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) peaks.push([-L / 2 + (L * (i + 0.5)) / nx, nz > 1 ? -W / 2 + (W * (k + 0.5)) / nz : 0]);
-  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: o.corners === 'fermes' ? W / 2 : W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
+  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: mid ? W / 2 : W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
 }
 // Sides fixed to a wall of the venue: hem straight along the wall, no poles and no guys on that side.
 const WALL_SIDES = [['zm', 'wallB', 'arrière'], ['zp', 'wallF', 'avant'], ['xm', 'wallL', 'gauche'], ['xp', 'wallR', 'droit']];
@@ -1345,13 +1346,15 @@ function addJoint(g, prim, a, b, H) {
    middle pole: a triangle); at a corner left open by a joint (two tents hooked together) it runs on to the corner
    pole. Sides hooked to another tent or fixed to a wall get no panel. */
 const CRYSTAL_BAND = 0.3;
-const crystalLen = (o) => { const T = stretchT(o), j = jnOf(o); return Math.ceil(SIDES.filter((k) => !j[k]).reduce((t, k) => t + sideLen(T, k), 0)); };
+const CRYSTAL_SIDES = [['zm', 'crB', 'arrière'], ['zp', 'crF', 'avant'], ['xm', 'crL', 'gauche'], ['xp', 'crR', 'droit']];
+const crystalSides = (o) => (o.corners === 'fermes' ? CRYSTAL_SIDES.filter(([, key]) => o[key]).map(([k]) => k) : []);
+const crystalLen = (o) => { const T = stretchT(o), j = jnOf(o); return Math.ceil(crystalSides(o).filter((k) => !j[k]).reduce((t, k) => t + sideLen(T, k), 0)); };
 const SIDE_CORNERS = { zm: [[-1, -1], [1, -1]], zp: [[-1, 1], [1, 1]], xm: [[-1, -1], [-1, 1]], xp: [[1, -1], [1, 1]] };
-function addCrystal(g, prim, T, joined, at, closed) {
+function addCrystal(g, prim, T, joined, at, closed, sides) {
   const inward = { xm: [1, 0], xp: [-1, 0], zm: [0, 1], zp: [0, -1] }, glass = [], band = [];
   const isClosed = ([cx, cz]) => closed.some(([x, z]) => x === cx && z === cz);
   const quad = (out, a, b, ya0, yb0, ya1, yb1) => out.push(a[0], ya0, a[1], b[0], yb0, b[1], b[0], yb1, b[1], a[0], ya0, a[1], b[0], yb1, b[1], a[0], ya1, a[1]);
-  for (const k of SIDES) {
+  for (const k of sides) {
     if (joined[k]) continue;
     const len = sideLen(T, k), sp = k[0] === 'x' ? T.sz : T.sx, [c0, c1] = SIDE_CORNERS[k].map(isClosed);
     const v0 = c0 ? sp : 0, v1 = c1 ? len - sp : len, ss = [];
@@ -3036,7 +3039,11 @@ const KINDS = {
       wallL: { label: 'Côté gauche fixé à un mur', type: 'bool', def: false },
       wallR: { label: 'Côté droit fixé à un mur', type: 'bool', def: false },
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
-      crystal: { when: (o) => o.corners === 'fermes', label: 'Parois cristal', type: 'bool', def: false },   // clear walls: only with the corners down to the ground
+      // clear walls, side by side: only with the corners down to the ground
+      crB: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté arrière', type: 'bool', def: false },
+      crF: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté avant', type: 'bool', def: false },
+      crL: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté gauche', type: 'bool', def: false },
+      crR: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté droit', type: 'bool', def: false },
       jn: { hidden: true, def: '' },   // joined sides, set automatically when another tent is brought alongside
       guys: { label: 'Haubans', type: 'bool', def: true },
       ...ANCHOR_OPTS,
@@ -3056,7 +3063,7 @@ const KINDS = {
       const aTxt = guys.length ? `${guys.length} haubans : ${[ac.stakes && `${ac.stakes} piqueté${ac.stakes > 1 ? 's' : ''}`, ac.blocks && `${ac.blocks} sur bloc${ac.blocks > 1 ? 's' : ''} de lestage`].filter(Boolean).join(', ')}${o.ancrage === 'mixte' ? ' (cliquez sur le bout d\'un hauban pour le changer)' : ''}` : '';
       const T1 = stretchT(o), walls = WALL_SIDES.filter(([, key]) => o[key]);
       const wTxt = walls.length ? `Fixée au mur : ${walls.map(([k, , n]) => `côté ${n} (${fmtM(sideLen(T1, k))} m)`).join(', ')}, sans poteaux ni haubans de ce côté` : '';
-      const crTxt = o.crystal && o.corners === 'fermes' ? `Parois cristal : ${crystalLen(o)} m linéaires, sous l'ourlet, bande de toile de 30 cm en pied` : '';
+      const crTxt = crystalSides(o).length ? `Parois cristal (${CRYSTAL_SIDES.filter(([k]) => crystalSides(o).includes(k)).map(([, , n]) => n).join(', ')}) : ${crystalLen(o)} m linéaires, sous l'ourlet, bande de toile de 30 cm en pied` : '';
       return [crTxt, o.size === 'mesure' ? `Sur mesure ${fmtM(T1.L)} × ${fmtM(T1.W)} m, bord à ${fmtM(T1.H)} m, ${T1.peaks.length > 1 ? `${T1.peaks.length} mâts centraux` : '1 mât central'} à ${fmtM(T1.peak)} m` : '', wTxt, jTxt, base, twTxt, aTxt].filter(Boolean).join(' · ');
     },
     // guy lines: [top of the pole, ground point 3 m out], skipping closed corners and joined sides
@@ -3074,6 +3081,7 @@ const KINDS = {
       }
       return out;
     },
+    migrate(opts, raw) { if (raw.crystal) for (const [, key] of CRYSTAL_SIDES) if (raw[key] === undefined) opts[key] = true; },   // the former single « Parois cristal » switch
     build(g, prim, o) { KINDS.stretch.stretchOne(g, prim, o, stretchT(o), jnOf(o)); },
     stretchOne(g, prim, o, T, joined) {
       const { L, sx, sz, H, peaks } = T, Wd = T.W, PEAK = T.peak;
@@ -3093,7 +3101,7 @@ const KINDS = {
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed, joined), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed, joined); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
       if (o.twinkle) { const tw = twinkleRun(T, o); if (tw) addTwinkle(g, tw); }
       const at = (k, v) => (k[0] === 'x' ? [k[1] === 'm' ? -L / 2 : L / 2, -Wd / 2 + v] : [-L / 2 + v, k[1] === 'm' ? -Wd / 2 : Wd / 2]);
-      if (o.crystal && o.corners === 'fermes') addCrystal(g, prim, T, joined, at, closed);
+      if (crystalSides(o).length) addCrystal(g, prim, T, joined, at, closed, crystalSides(o));
       for (const k of SIDES) if (joined[k + '*']) for (const [s0, s1] of joined[k + '@']) addJoint(g, prim, at(k, s0), at(k, s1), H);
       const batten = SIDES.filter((k) => joined[k + 'W']).map((k) => { const [a, b] = [at(k, 0), at(k, sideLen(T, k))]; return stick([a[0], H + 0.05, a[1]], [b[0], H + 0.05, b[1]], 0.04, 0.04, 6); });   // rail screwed to the wall
       if (batten.length) g.add(new THREE.Mesh(mergeLocal(batten), MAT.black));
@@ -3107,7 +3115,7 @@ const KINDS = {
         if (t.cable) q.cable_porteur_m = Math.ceil(t.cable); }
       const tw = o.twinkle ? twinkleRun(stretchT(o), o) : null;
       if (tw) { q.scintillant_m = tw.buy; q.scintillant_brins = tw.n; if (!q.cable_porteur_m) q.cable_porteur_m = Math.ceil(tw.bay); }
-      if (o.crystal && o.corners === 'fermes') q.paroi_cristal_m = crystalLen(o);
+      if (crystalSides(o).length) q.paroi_cristal_m = crystalLen(o);
       return q;
     },
   },
