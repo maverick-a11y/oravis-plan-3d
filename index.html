@@ -847,6 +847,17 @@ const STRETCH = {
   '21x10.5': { name: '10,5 × 21 m', L: 21, W: 10.5, sx: 4.2, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-5, 0], [0, 0], [5, 0]] },
   '21x15': { name: '21 × 15 m', L: 21, W: 15, sx: 4.2, sz: 3, H: 3, peak: 4.5, R: 4.8, peaks: [[-5, -2.5], [0, -2.5], [5, -2.5], [-5, 2.5], [0, 2.5], [5, 2.5]] },
 };
+/* Stretch tent made to measure (size "mesure"): any length × width in 50 cm steps and the edge height chosen;
+   perimeter poles evenly spaced at most 4,5 m apart, centre masts about every 7 m along the length (two rows from
+   12 m wide), masts 1 m above the edge (1,5 m with two rows). */
+function stretchT(o) {
+  if (o.size !== 'mesure') return STRETCH[o.size] || STRETCH['15x10.5'];
+  const L = +o.mL || 15, W = +o.mW || 10.5, H = +o.mH || 3, nx = Math.max(1, Math.round(L / 7)), nz = W > 12 ? 2 : 1, peaks = [];
+  for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) peaks.push([-L / 2 + (L * (i + 0.5)) / nx, nz > 1 ? -W / 2 + (W * (k + 0.5)) / nz : 0]);
+  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
+}
+// Sides fixed to a wall of the venue: hem straight along the wall, no poles and no guys on that side.
+const WALL_SIDES = [['zm', 'wallB', 'arrière'], ['zp', 'wallF', 'avant'], ['xm', 'wallL', 'gauche'], ['xp', 'wallR', 'droit']];
 /* String lights under a stretch tent: one strand starts every 70 cm along the fabric edge (following the
    scallops: lower and pulled in between poles). Masts in the same row are linked by a tensioned carrier
    cable; each strand runs to the nearest point of that cable (or of the mast when it is beyond it).
@@ -867,7 +878,7 @@ const EYELET = 0.7, GUTTER_W = 0.5, JOIN_SNAP = 1.5, SIDES = ['xm', 'xp', 'zm', 
 const jointY = (H, len, u) => H - Math.min(0.5, 0.04 * len) * Math.sin(PI * u);
 const sideLen = (T, k) => (k[0] === 'x' ? T.W : T.L);
 function jnOf(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = {};
+  const T = stretchT(o), j = {};
   for (const t of String(o.jn || '').split(',')) {
     const m = t.match(/^(xm|xp|zm|zp)(\*?)(?:@([\d.]+)-([\d.]+))?$/);
     if (!m) continue;
@@ -875,6 +886,7 @@ function jnOf(o) {
     j[k] = true; if (m[2]) j[k + '*'] = true;
     (j[k + '@'] ||= []).push(m[3] ? [+m[3], +m[4]] : [0, sideLen(T, k)]);
   }
+  for (const [k, key] of WALL_SIDES) if (o[key] && !j[k]) { j[k] = j[k + 'W'] = true; j[k + '@'] = [[0, sideLen(T, k)]]; }
   return j;
 }
 const onSide = (T, k, x, z) => Math.abs(k[0] === 'x' ? x - (k[1] === 'm' ? -T.L / 2 : T.L / 2) : z - (k[1] === 'm' ? -T.W / 2 : T.W / 2)) < 1e-6;
@@ -912,16 +924,16 @@ function hemAt(T, k, s, joined) {
   return { y: T.H - sag * w, w: pull * w };
 }
 // Closed corners never sit on a joint.
-const closedFor = (o, j) => { const T = STRETCH[o.size] || STRETCH['15x10.5']; return closedOf(o).filter(([cx, cz]) => !jointHits(T, j, (cx * T.L) / 2, (cz * T.W) / 2).length); };
+const closedFor = (o, j) => { const T = stretchT(o); return closedOf(o).filter(([cx, cz]) => !jointHits(T, j, (cx * T.L) / 2, (cz * T.W) / 2).length); };
 const carabOf = (len) => Math.floor(len / EYELET + 1e-6) + 1;
 function joinTotals(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = jnOf(o), sides = SIDES.filter((k) => j[k]);
+  const T = stretchT(o), j = jnOf(o), sides = SIDES.filter((k) => j[k] && !j[k + 'W']);
   const lens = sides.flatMap((k) => j[k + '@'].map(([s0, s1]) => s1 - s0));
   // a joint is shared by two tents: each counts half of it (the récap adds both halves)
   return { sides, lens, carab: lens.reduce((t, l) => t + carabOf(l) / 2, 0), gutter: lens.reduce((t, l) => t + l / 2, 0), removed: perimOf(T).filter(([x, z]) => jointHits(T, j, x, z).some(([, end]) => !end)).length };   // poles at the joint ends stay (shared)
 }
 function stretchLights(o) {
-  const T = STRETCH[o.size] || STRETCH['15x10.5'], j = jnOf(o), t = lightTotals(T, o.lights === 'guinguette' ? 'guinguette' : 'fine', closedFor(o, j), j);
+  const T = stretchT(o), j = jnOf(o), t = lightTotals(T, o.lights === 'guinguette' ? 'guinguette' : 'fine', closedFor(o, j), j);
   return { n: t.n, m: t.m, buy: t.buy, bulbs: t.bulbs, cable: t.cable, total: t.route ? t.route.total : t.m, extra: t.route ? t.route.extra : 0, feeds: t.route ? 1 : 0 };
 }
 /* Twinkling garland under the fabric, in one bay between two centre masts (left or right bay of the row).
@@ -929,7 +941,7 @@ function stretchLights(o) {
    fabric up to the carrier cable between the two masts, goes over it and ends on the hem of the opposite side
    (both hem points follow the scallops). Fine micro-LEDs every 10 cm. */
 const mastRow = (T) => T.peaks.filter(([, z]) => Math.abs(z) < 1e-6).map(([x]) => x).sort((a, b) => a - b);
-const twinkleOk = (o) => mastRow(STRETCH[o.size] || STRETCH['15x10.5']).length >= 2;
+const twinkleOk = (o) => mastRow(stretchT(o)).length >= 2;
 function twinkleRun(T, o) {
   const row = mastRow(T);
   if (row.length < 2) return null;
@@ -2971,29 +2983,38 @@ const KINDS = {
   stretch: {
     label: 'Tente stretch', glyph: '⌒', color: '#d8cbb0', colorLabel: 'Toile', mat: { side: THREE.DoubleSide, roughness: 0.85 },
     opts: {
-      size: { label: 'Taille', type: 'select', values: Object.keys(STRETCH), names: Object.fromEntries(Object.entries(STRETCH).map(([k, v]) => [k, v.name])), def: '15x10.5' },
+      size: { label: 'Taille', type: 'select', values: [...Object.keys(STRETCH), 'mesure'], names: { ...Object.fromEntries(Object.entries(STRETCH).map(([k, v]) => [k, v.name])), mesure: 'Sur mesure' }, def: '15x10.5' },
+      mL: { when: (o) => o.size === 'mesure', label: 'Longueur', type: 'number', min: 5, max: 40, step: 0.5, def: 15 },
+      mW: { when: (o) => o.size === 'mesure', label: 'Largeur', type: 'number', min: 4, max: 25, step: 0.5, def: 10.5 },
+      mH: { when: (o) => o.size === 'mesure', label: 'Hauteur de bord', type: 'number', min: 2.5, max: 4.5, step: 0.25, def: 3 },
+      wallB: { label: 'Côté arrière fixé à un mur', type: 'bool', def: false },
+      wallF: { label: 'Côté avant fixé à un mur', type: 'bool', def: false },
+      wallL: { label: 'Côté gauche fixé à un mur', type: 'bool', def: false },
+      wallR: { label: 'Côté droit fixé à un mur', type: 'bool', def: false },
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
       jn: { hidden: true, def: '' },   // joined sides, set automatically when another tent is brought alongside
       guys: { label: 'Haubans', type: 'bool', def: true },
       ...ANCHOR_OPTS,
       lights: { label: 'Guirlandes lumineuses', type: 'select', values: ['aucune', 'normale', 'guinguette', 'dense'], names: { aucune: 'Aucune', normale: 'Fine, étoile 1 brin tous les 70 cm', guinguette: 'Guinguette, 1 brin par poteau (3 ampoules/m)', dense: 'Fine, étoile 1 brin tous les 70 cm' }, def: 'aucune' },
       twinkle: { when: twinkleOk, label: 'Guirlande scintillante entre 2 mâts', type: 'bool', def: false },
-      twBay: { when: (o) => o.twinkle && twinkleOk(o) && mastRow(STRETCH[o.size]).length > 2, label: 'Travée', type: 'select', values: ['gauche', 'droite'], names: { gauche: 'Entre les mâts de gauche', droite: 'Entre les mâts de droite' }, def: 'gauche' },
+      twBay: { when: (o) => o.twinkle && twinkleOk(o) && mastRow(stretchT(o)).length > 2, label: 'Travée', type: 'select', values: ['gauche', 'droite'], names: { gauche: 'Entre les mâts de gauche', droite: 'Entre les mâts de droite' }, def: 'gauche' },
       twSide: { when: (o) => o.twinkle && twinkleOk(o), label: 'Départ au sol', type: 'select', values: ['avant', 'arriere'], names: { avant: 'Côté avant (finit au bord arrière)', arriere: 'Côté arrière (finit au bord avant)' }, def: 'avant' },
       twStep: { when: (o) => o.twinkle && twinkleOk(o), label: 'Écart entre brins', type: 'select', values: [20, 30, 50], suffix: ' cm', def: 30 },
       seeThrough: SEE,
     },
     info(o) {
-      const T0 = STRETCH[o.size] || STRETCH['15x10.5'], tw = o.twinkle ? twinkleRun(T0, o) : null;
+      const T0 = stretchT(o), tw = o.twinkle ? twinkleRun(T0, o) : null;
       const twTxt = tw ? `Guirlande scintillante : ${tw.n} brins tous les ${o.twStep || 30} cm (sol → bord de toile → par-dessus le filin → bord opposé) · ${Math.round(tw.len)} m (+10 % de marge = ${tw.buy} m)` + (!o.lights || o.lights === 'aucune' ? ` · filin entre mâts ${fmtM(tw.bay)} m` : '') : '';
       const base = stretchLightsInfo(o), jt = joinTotals(o);
       const jTxt = jt.sides.length ? `Jumelée : ${jt.lens.length} jonction${jt.lens.length > 1 ? 's' : ''} (${jt.lens.map((l) => fmtM(Math.round(l * 100) / 100) + ' m').join(' + ')}) · ${jt.lens.reduce((t, l) => t + carabOf(l), 0)} mousquetons (1 par œillet, tous les 70 cm) · gouttière ${jt.lens.map((l) => fmtM(Math.round(l * 100) / 100)).join(' + ')} m × 50 cm · ${jt.removed} poteaux de tour retirés` : '';
       const guys = KINDS.stretch.guysOf(o), ac = anchorCount(o, guys);
       const aTxt = guys.length ? `${guys.length} haubans : ${[ac.stakes && `${ac.stakes} piqueté${ac.stakes > 1 ? 's' : ''}`, ac.blocks && `${ac.blocks} sur bloc${ac.blocks > 1 ? 's' : ''} de lestage`].filter(Boolean).join(', ')}${o.ancrage === 'mixte' ? ' (cliquez sur le bout d\'un hauban pour le changer)' : ''}` : '';
-      return [jTxt, base, twTxt, aTxt].filter(Boolean).join(' · ');
+      const T1 = stretchT(o), walls = WALL_SIDES.filter(([, key]) => o[key]);
+      const wTxt = walls.length ? `Fixée au mur : ${walls.map(([k, , n]) => `côté ${n} (${fmtM(sideLen(T1, k))} m)`).join(', ')}, sans poteaux ni haubans de ce côté` : '';
+      return [o.size === 'mesure' ? `Sur mesure ${fmtM(T1.L)} × ${fmtM(T1.W)} m, bord à ${fmtM(T1.H)} m, ${T1.peaks.length > 1 ? `${T1.peaks.length} mâts centraux` : '1 mât central'} à ${fmtM(T1.peak)} m` : '', wTxt, jTxt, base, twTxt, aTxt].filter(Boolean).join(' · ');
     },
     // guy lines: [top of the pole, ground point 3 m out], skipping closed corners and joined sides
-    guysOf(o, T = STRETCH[o.size] || STRETCH['15x10.5'], joined = jnOf(o)) {
+    guysOf(o, T = stretchT(o), joined = jnOf(o)) {
       const out = [];
       if (!o.guys) return out;
       const { L, H } = T, Wd = T.W, closed = closedFor(o, joined), near = (a, b) => Math.abs(a - b) < 1e-6;
@@ -3007,7 +3028,7 @@ const KINDS = {
       }
       return out;
     },
-    build(g, prim, o) { KINDS.stretch.stretchOne(g, prim, o, STRETCH[o.size] || STRETCH['15x10.5'], jnOf(o)); },
+    build(g, prim, o) { KINDS.stretch.stretchOne(g, prim, o, stretchT(o), jnOf(o)); },
     stretchOne(g, prim, o, T, joined) {
       const { L, sx, sz, H, peaks } = T, Wd = T.W, PEAK = T.peak;
       const closed = closedFor(o, joined);
@@ -3027,15 +3048,17 @@ const KINDS = {
       if (o.twinkle) { const tw = twinkleRun(T, o); if (tw) addTwinkle(g, tw); }
       const at = (k, v) => (k[0] === 'x' ? [k[1] === 'm' ? -L / 2 : L / 2, -Wd / 2 + v] : [-L / 2 + v, k[1] === 'm' ? -Wd / 2 : Wd / 2]);
       for (const k of SIDES) if (joined[k + '*']) for (const [s0, s1] of joined[k + '@']) addJoint(g, prim, at(k, s0), at(k, s1), H);
+      const batten = SIDES.filter((k) => joined[k + 'W']).map((k) => { const [a, b] = [at(k, 0), at(k, sideLen(T, k))]; return stick([a[0], H + 0.05, a[1]], [b[0], H + 0.05, b[1]], 0.04, 0.04, 6); });   // rail screwed to the wall
+      if (batten.length) g.add(new THREE.Mesh(mergeLocal(batten), MAT.black));
     },
     quote: (o) => {
       const jt = joinTotals(o);
       const ac = anchorCount(o, KINDS.stretch.guysOf(o));
-      const q = { ['tente_stretch_' + (STRETCH[o.size] ? o.size : '15x10.5')]: 1, mousqueton_jumelage: jt.carab, gouttiere_m: jt.gutter, piquet_hauban: ac.stakes, bloc_lestage: ac.blocks };
+      const q = { ['tente_stretch_' + (o.size === 'mesure' || STRETCH[o.size] ? o.size : '15x10.5')]: 1, mousqueton_jumelage: jt.carab, gouttiere_m: jt.gutter, piquet_hauban: ac.stakes, bloc_lestage: ac.blocks };
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette', t = stretchLights(o);
         if (gg) { q.guinguette_m = t.buy; q.ampoules_guinguette = t.bulbs; q.depart_guinguette = t.feeds; } else { q.guirlande_m = t.buy; q.guirlande_brins = t.n; }
         if (t.cable) q.cable_porteur_m = Math.ceil(t.cable); }
-      const tw = o.twinkle ? twinkleRun(STRETCH[o.size] || STRETCH['15x10.5'], o) : null;
+      const tw = o.twinkle ? twinkleRun(stretchT(o), o) : null;
       if (tw) { q.scintillant_m = tw.buy; q.scintillant_brins = tw.n; if (!q.cable_porteur_m) q.cable_porteur_m = Math.ceil(tw.bay); }
       return q;
     },
@@ -3366,6 +3389,7 @@ const CATALOG = [
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m', sub: '3 mâts · implantation 27 × 16,5 m', opts: { size: '21x10.5' } },
     { kind: 'stretch', label: 'Stretch 10,5 × 21 m + scintillant', sub: '220 m² · scintillant du sol, par-dessus le filin, d\'un bord à l\'autre', opts: { size: '21x10.5', twinkle: true } },
     { kind: 'stretch', label: 'Stretch 21 × 15 m', sub: '6 mâts · implantation 27 × 21 m', opts: { size: '21x15' } },
+    { kind: 'stretch', label: 'Toile sur mesure Clos du Tuilier', name: 'Toile sur mesure Clos du Tuilier', sub: '18 × 8,50 m · bord à 3,50 m · fixée aux murs de la cour, sans poteaux', opts: { size: 'mesure', mL: 18, mW: 8.5, mH: 3.5, wallB: true, wallF: true, wallL: true, wallR: true } },
     { kind: 'pagode', label: 'Pagode 5 × 5 m', sub: '25 m² · h 2,50 m sous chéneau · couleur au choix' },
     { kind: 'pagode', label: 'Pagode 5 × 5 m fermée 3 côtés', sub: 'murs fond + côtés · avant ouvert', opts: { walls: 'trois' } },
     { kind: 'shade', label: 'Voile d\'ombrage 4 × 5 m', sub: '4 poteaux bambou · implantation 10 × 11 m' },
@@ -3441,7 +3465,7 @@ const ITEM_DEFS = [
   ['table_serpentine', 'Table serpentine (segment 2,60 m de pointe à pointe × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_m2', 'Piste de danse (m²)'],
-  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['bloc_lestage', 'Bloc de lestage béton 60 × 60 × 100 cm (hauban)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
+  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['tente_stretch_mesure', 'Tente stretch sur mesure'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['bloc_lestage', 'Bloc de lestage béton 60 × 60 × 100 cm (hauban)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'], ['plancher_m2', 'Plancher événementiel (m²)'], ['plancher_bordure_m', 'Bordure de plancher (mètres)'], ['rampe_pmr', 'Rampe d\'accès PMR'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
@@ -3863,7 +3887,7 @@ const VENUES = {
     // traced on the satellite view: 0,11 m per pixel (checked on the cars and the 10 × 4,4 m pool), origin in the middle
     // of the big lawn (pixel 620, 530); north is -z
     w: 170, d: 126,
-    items: [{ kind: 'pool', p: [-27.5, 0, 8.03], r: [0, 0.36, 0] }],   // placed when the venue is chosen
+    items: [{ kind: 'pool', p: [-27.5, 0, 8.03], r: [0, 0.5, 0] }],   // placed when the venue is chosen, parallel to the mas
     build(G) {
       const S = 0.11, P = ([px, py]) => [(px - 620) * S, (py - 530) * S];
       const mat = (c, r = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: r, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
@@ -3900,13 +3924,37 @@ const VENUES = {
       strip([[0, 1078], [700, 990], [1542, 878]], 5, tarmac, 0.09);                                                          // road to the south
       strip([[1475, 880], [1500, 640], [1450, 420], [1390, 250], [1330, 110], [1300, 0]], 4.5, tarmac, 0.09);                // lane to the east
       const [pX, pZ] = P([370, 603]);   // the pool itself is an object (KINDS.pool) placed here, so it can be moved
-      // the mas: old stone farmhouse in several blocks under weathered tile roofs, turned about 20°
+      // the mas, traced on the close-up aerial view (0,08 m per pixel, turned about 102° from the main view, matched on
+      // the pool): a long double-roofed range and, across a 2 m alley, a second range parallel to it toward the road;
+      // smaller blocks at the north end. Stone walls, old tiles in two shades.
+      const Q = ([x, y]) => P([370 + 0.727 * (-0.201 * (x - 395) - 0.979 * (y - 838)), 603 + 0.727 * (0.979 * (x - 395) - 0.201 * (y - 838))]);
       const stone = '#a8957a', roofA = new THREE.MeshStandardMaterial({ color: '#8f6f58', roughness: 0.95 }), roofB = new THREE.MeshStandardMaterial({ color: '#a8735a', roughness: 0.95 });
       const face = (w, h) => venueFacade(w, h, { stone, shutter: '#cfc8b8', rows: h > 6.5 ? [[1, 2.2], [4.2, 1.6]] : [[1, 2.2]], bays: Math.max(2, Math.round(w / 3.5)) });
-      for (const [px, py, w, d, h, roofH, rm] of [
-        [505, 835, 10, 12, 7, 3, roofB], [605, 755, 16.5, 7.7, 8, 2.6, roofA], [590, 695, 6, 5, 6, 2, roofB], [685, 700, 5.5, 5.5, 8.5, 2.2, roofA],
-        [740, 740, 6, 13, 7, 2.6, roofB], [635, 820, 18, 5.5, 6.5, 2, roofA], [580, 905, 21, 8.5, 6, 2.8, roofB], [905, 865, 5, 6, 3.5, 1.4, roofB],
-      ]) { const [x, z] = P([px, py]); venueBlock(G, { x, z, w, d, h, roofH, rot: 0.36, roofMat: rm, facade: face(w, h), side: face(d, h) }); }
+      const MAS_ROT = 0.5, M = 0.08;
+      for (const [ix, iy, l, wd, h, roofH, rm] of [   // centre on the close-up (px), length along the ranges and width (px)
+        [580, 360, 280, 75, 7.5, 2.4, roofB],   // main range, light roof
+        [515, 425, 260, 80, 7, 2.4, roofA],     // main range, dark roof
+        [770, 410, 250, 100, 6.5, 2.6, roofB],  // second range, across the alley
+        [455, 265, 110, 180, 7, 2.6, roofB],    // north block
+        [410, 340, 90, 80, 6, 2, roofA],
+        [430, 480, 90, 80, 5, 1.8, roofB],
+        [660, 560, 120, 190, 6.5, 2.6, roofB],  // south block by the drive
+      ]) { const [x, z] = Q([ix, iy]), w = l * M, d = wd * M; venueBlock(G, { x, z, w, d, h, roofH, rot: MAS_ROT, roofMat: rm, facade: face(w, h), side: face(d, h) }); }
+      const [ox, oz] = P([905, 865]);
+      venueBlock(G, { x: ox, z: oz, w: 5, d: 6, h: 3.5, roofH: 1.4, rot: 0.36, roofMat: roofB, facade: face(5, 3.5), side: face(6, 3.5) });
+      // 4 m stone wall closing the courtyard (high enough to rig a made-to-measure stretch tent on): from the road end of the second range to the small outbuilding, then back up
+      // to the corner of the north block
+      { const corners = ([x, z], w, d, r) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, k]) => [x + Math.cos(r) * i * w / 2 + Math.sin(r) * k * d / 2, z - Math.sin(r) * i * w / 2 + Math.cos(r) * k * d / 2]);
+        const by = (pts, f) => pts.reduce((m, p) => (f(p) > f(m) ? p : m));
+        const second = corners(Q([770, 410]), 250 * M, 100 * M, MAS_ROT), north = corners(Q([455, 265]), 110 * M, 180 * M, MAS_ROT), shed = corners([ox, oz], 5, 6, 0.36);
+        const path = [by(second, ([x, z]) => x + z), by(shed, ([x]) => -x), by(north, ([x]) => x)], wall = [];
+        for (let i = 0; i < path.length - 1; i++) {
+          const [[ax, az], [bx, bz]] = [path[i], path[i + 1]], len = Math.hypot(bx - ax, bz - az);
+          wall.push(new THREE.BoxGeometry(len + 0.5, 4, 0.5).rotateY(-Math.atan2(bz - az, bx - ax)).translate((ax + bx) / 2, 2, (az + bz) / 2));
+        }
+        G.add(new THREE.Mesh(mergeLocal(wall), new THREE.MeshStandardMaterial({ color: stone, roughness: 0.95 }))); }
+      { const [ax, az] = Q([625, 300]), [bx, bz] = Q([815, 540]), len = Math.hypot(bx - ax, bz - az);   // the alley between the two ranges
+        const al = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.2).rotateX(-PI / 2).rotateY(-Math.atan2(bz - az, bx - ax)), gravel); al.position.set((ax + bx) / 2, 0.08, (az + bz) / 2); al.receiveShadow = true; G.add(al); }
       // lavender field: rows running across the slope
       { const A = P([690, 290]), B = P([860, 195]), C = P([950, 420]), D = P([830, 515]), rows = [], n = 19;   // field corners, clockwise from the north-west
         for (let i = 0; i < n; i++) {   // each row runs from the west edge (A–D) to the east edge (B–C)
@@ -4203,7 +4251,7 @@ function save(s) { if (VIEW) return; try { localStorage.setItem(STORE, s); } cat
    re-checks all tents, so a tent moved away is unhooked. */
 const _jv = new THREE.Vector3();
 function tentSides(g) {
-  const T = STRETCH[g.userData.opts.size] || STRETCH['15x10.5'], L = T.L, W = T.W;
+  const T = stretchT(g.userData.opts), L = T.L, W = T.W;
   g.updateMatrixWorld(true);
   const w = (x, z) => { _jv.set(x, 0, z).applyMatrix4(g.matrixWorld); return [_jv.x, _jv.z]; };
   const c = w(0, 0);
@@ -4374,7 +4422,7 @@ $('#pCat').addEventListener('click', (e) => {
   const it = CATALOG[b.dataset.c][1][b.dataset.i];
   const def = KINDS[it.kind];
   const snap = (v) => Math.round(v * 4) / 4;
-  const g = addObject(it.kind, { opts: it.opts, color: it.color, p: [snap(orbit.target.x), def.y ?? 0, snap(orbit.target.z)] });
+  const g = addObject(it.kind, { opts: it.opts, color: it.color, name: it.name ? uniqueName(it.name) : undefined, p: [snap(orbit.target.x), def.y ?? 0, snap(orbit.target.z)] });
   select(g, false);
   commit();
   toast(`${it.label} ajouté au plan`);
@@ -5380,7 +5428,7 @@ function localParse(raw) {
   // simple layout: covers (garland, tent, floor) at the centre, tables under them, the rest in a row in front
   const fp = (it) => { const o = it.opts; switch (it.kind) {
     case 'guinguette': return [o.length || 12, o.width || 6]; case 'fairy': return [o.length || 10, o.width || 8];
-    case 'stretch': { const T = STRETCH[o.size]; return [T.L, T.W]; } case 'plancher': return [o.length || 10, o.width || 6];
+    case 'stretch': { const T = stretchT(o); return [T.L, T.W]; } case 'plancher': return [o.length || 10, o.width || 6];
     case 'pagode': return [5, 5]; case 'dance': return [o.length || 5, o.width || 5]; case 'stage': return [o.width || 4, o.depth || 3];
     case 'dj': return [2.4, 1.6]; case 'bar': return [2.1, 0.7]; case 'barZinc': return [1.8, 0.5];
     default: return [1, 1]; } };
