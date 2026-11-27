@@ -3701,22 +3701,22 @@ const VENUES = {
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 130).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#5f6e3f', roughness: 1 }));
       ground.position.y = -0.01; ground.receiveShadow = true; G.add(ground);
       const paving = mat('#e6dcc8'), deckM = mat('#e3cfa6'), gravel = mat('#d9cfb9');
-      slab(40, 38, 0, 0, paving);               // garden terrace (restaurant)
-      slab(24, 36, 0, 38, deckM);                // pool deck
+      slab(40, 28.8, 0, -4.6, paving);              // garden terrace (restaurant)
+      slab(24, 36, 0, 28, deckM);                // pool deck
       slab(6, 90, -36, 8, gravel);               // drive along the gallery wing
       slab(8, 6, 0, 61, gravel);                 // way in from the south
       // pool 25 × 10 m with its stone surround and the curved headwall on the mas side
       const water = new THREE.Mesh(new THREE.PlaneGeometry(10, 25).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#1f7f90', roughness: 0.1, metalness: 0.1 }));
-      water.position.set(0, 0.12, 38); G.add(water);
+      water.position.set(0, 0.12, 28); G.add(water);
       const stoneM = new THREE.MeshStandardMaterial({ color: '#dcc79c', roughness: 0.9 }), parts = [];
-      for (const [w, d, x, z] of [[11.2, 0.6, 0, 25.2], [11.2, 0.6, 0, 50.8], [0.6, 26.2, -5.3, 38], [0.6, 26.2, 5.3, 38]]) parts.push(new THREE.BoxGeometry(w, 0.2, d).translate(x, 0.1, z));
-      parts.push(new THREE.BoxGeometry(5, 1.1, 0.6).translate(0, 0.55, 24.6), new THREE.CylinderGeometry(1.6, 1.6, 0.6, 24, 1, false, -PI / 2, PI).rotateX(PI / 2).scale(1.55, 0.45, 1).translate(0, 1.1, 24.6));
-      // garden terrace measured on site: 18 × 11 m block of four pergolas round a Ø 6 m fountain, cut by a 2 m cross path;
-      // plane trees in pairs 9,50 m apart, two rows on each side, 7,5 m between rows
+      for (const [w, d, x, z] of [[11.2, 0.6, 0, 15.2], [11.2, 0.6, 0, 40.8], [0.6, 26.2, -5.3, 28], [0.6, 26.2, 5.3, 28]]) parts.push(new THREE.BoxGeometry(w, 0.2, d).translate(x, 0.1, z));
+      parts.push(new THREE.BoxGeometry(5, 1.1, 0.6).translate(0, 0.55, 14.6), new THREE.CylinderGeometry(1.6, 1.6, 0.6, 24, 1, false, -PI / 2, PI).rotateX(PI / 2).scale(1.55, 0.45, 1).translate(0, 1.1, 14.6));
+      // garden terrace measured on site: 18 m (toward the pool) × 11 m block of four pergolas round a Ø 6 m fountain, cut by a
+      // 2 m cross path; plane trees in pairs 9,50 m apart along the terrace, two rows on each side (east, west), 7,5 m apart
       parts.push(new THREE.CylinderGeometry(3, 3.1, 0.6, 48, 1, true).translate(0, 0.3, 0), new THREE.TorusGeometry(3.05, 0.2, 6, 48).rotateX(PI / 2).translate(0, 0.6, 0), new THREE.CylinderGeometry(0.3, 0.45, 1.3, 12).translate(0, 0.65, 0));
       G.add(new THREE.Mesh(mergeLocal(parts), stoneM));
       { const w2 = new THREE.Mesh(new THREE.CircleGeometry(2.95, 48).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#7d9a7c', roughness: 0.2 })); w2.position.y = 0.45; G.add(w2); }
-      // each pergola fills a quarter of the block (x 1 → 9 m, z 1 → 5,5 m from the centre) less a 4,5 m arc round the fountain
+      // each pergola fills a quarter of the block (drawn 9 × 5,5 m, then turned to run toward the pool) less a 4,5 m arc round the fountain
       const iron = [], cane = [], PW = 9, PD = 5.5, PA = 1, PR = 4.5, ca = Math.sqrt(PR * PR - PA * PA);
       const quarter = new THREE.Shape([[ca, PA], [PW, PA], [PW, PD], [PA, PD], [PA, ca]].map(([a, b]) => new THREE.Vector2(a, b)));
       { const a0 = Math.atan2(ca, PA), a1 = Math.atan2(PA, ca); for (let k = 1; k < 12; k++) { const t = a0 + (a1 - a0) * k / 12; quarter.lineTo(PR * Math.cos(t), PR * Math.sin(t)); } }
@@ -3725,8 +3725,8 @@ const VENUES = {
         for (const [a, b] of [[ca, PA], [PW, PA], [PW, PD], [PA, PD], [PA, ca]]) iron.push(new THREE.BoxGeometry(0.12, 2.85, 0.12).translate(sx * a, 1.42, sz * b));
         iron.push(new THREE.BoxGeometry(PW - PA, 0.12, 0.12).translate(sx * (PA + PW) / 2, 2.8, sz * PD), new THREE.BoxGeometry(PW - ca, 0.12, 0.12).translate(sx * (ca + PW) / 2, 2.8, sz * PA), new THREE.BoxGeometry(0.12, 0.12, PD - PA).translate(sx * PW, 2.8, sz * (PA + PD) / 2), new THREE.BoxGeometry(0.12, 0.12, PD - ca).translate(sx * PA, 2.8, sz * (ca + PD) / 2));
       }
-      G.add(new THREE.Mesh(mergeLocal(iron), new THREE.MeshStandardMaterial({ color: '#3b3530', roughness: 0.6, metalness: 0.4 })));
-      G.add(new THREE.Mesh(mergeLocal(cane), new THREE.MeshStandardMaterial({ color: '#b89a6a', roughness: 1, side: THREE.DoubleSide })));
+      G.add(new THREE.Mesh(mergeLocal(iron).rotateY(PI / 2), new THREE.MeshStandardMaterial({ color: '#3b3530', roughness: 0.6, metalness: 0.4 })));
+      G.add(new THREE.Mesh(mergeLocal(cane).rotateY(PI / 2), new THREE.MeshStandardMaterial({ color: '#b89a6a', roughness: 1, side: THREE.DoubleSide })));
       // buildings: ochre mas with grey-blue shutters, gallery wing (west), long stone barn with its round window (east)
       const roofMat = new THREE.MeshStandardMaterial({ color: '#c0704a', roughness: 0.9 });
       const mas = venueFacade(46, 9, { stone: '#e9cf9c', shutter: '#8d9ca8', rows: [[1.0, 2.4], [5.0, 2.0]], bays: 10 });
@@ -3743,7 +3743,7 @@ const VENUES = {
       G.add(new THREE.Mesh(mergeLocal(wood), new THREE.MeshStandardMaterial({ color: '#6b5440', roughness: 0.8 })));
       // square taupe parasols and dark loungers on both sides of the pool
       const shade = [], poles = [], loung = [];
-      for (const sx of [-1, 1]) for (const z of [28.5, 35, 41.5, 48]) {
+      for (const sx of [-1, 1]) for (const z of [18.5, 25, 31.5, 38]) {
         shade.push(new THREE.ConeGeometry(2.9, 0.5, 4, 1).rotateY(PI / 4).translate(sx * 8.6, 2.75, z));
         poles.push(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8).translate(sx * 8.6, 1.4, z));
         for (const dz of [-1.1, 1.1]) loung.push(new THREE.BoxGeometry(1.9, 0.35, 0.7).translate(sx * 7.2, 0.25, z + dz));
@@ -3753,16 +3753,16 @@ const VENUES = {
       G.add(new THREE.Mesh(mergeLocal(loung), new THREE.MeshStandardMaterial({ color: '#2d2f31', roughness: 0.7 })));
       // clipped hedges round the pool deck and the terrace, boxwood balls, cypress rows, plane trees
       const hedge = new THREE.MeshStandardMaterial({ color: '#3f6b2f', roughness: 0.95 }), hedges = [];
-      for (const [w, d, x, z] of [[24, 0.8, 0, 19.8], [0.8, 36, -12.4, 38], [0.8, 36, 12.4, 38], [9, 0.8, -7.5, 56], [9, 0.8, 7.5, 56]]) hedges.push(new THREE.BoxGeometry(w, 1.1, d).translate(x, 0.55, z));
+      for (const [w, d, x, z] of [[24, 0.8, 0, 9.8], [0.8, 36, -12.4, 28], [0.8, 36, 12.4, 28], [9, 0.8, -7.5, 46], [9, 0.8, 7.5, 46]]) hedges.push(new THREE.BoxGeometry(w, 1.1, d).translate(x, 0.55, z));
       const rb = seeded(31);
-      for (let i = 0; i < 26; i++) { const sx = i % 2 ? 1 : -1, r = 0.5 + rb() * 0.4; hedges.push(new THREE.SphereGeometry(r, 10, 8).translate(sx * (13.6 + rb() * 1.6), r, 21 + rb() * 34)); }
+      for (let i = 0; i < 26; i++) { const sx = i % 2 ? 1 : -1, r = 0.5 + rb() * 0.4; hedges.push(new THREE.SphereGeometry(r, 10, 8).translate(sx * (13.6 + rb() * 1.6), r, 11 + rb() * 34)); }
       G.add(new THREE.Mesh(mergeLocal(hedges), hedge));
       const cyp = [];
-      for (const sx of [-1, 1]) for (let z = 22; z <= 54; z += 3.2) cyp.push(new THREE.ConeGeometry(0.9, 11, 8).translate(sx * 15.6, 6, z), new THREE.SphereGeometry(0.9, 8, 6).translate(sx * 15.6, 0.6, z));
-      for (let x = -9; x <= 9; x += 3) cyp.push(new THREE.ConeGeometry(0.9, 10, 8).translate(x, 5.5, 57.6));
+      for (const sx of [-1, 1]) for (let z = 12; z <= 44; z += 3.2) cyp.push(new THREE.ConeGeometry(0.9, 11, 8).translate(sx * 15.6, 6, z), new THREE.SphereGeometry(0.9, 8, 6).translate(sx * 15.6, 0.6, z));
+      for (let x = -9; x <= 9; x += 3) cyp.push(new THREE.ConeGeometry(0.9, 10, 8).translate(x, 5.5, 47.6));
       const cm = new THREE.Mesh(mergeLocal(cyp), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
       const trees = [];
-      for (const sx of [-1, 1]) for (const z of [-16, -8.5, 8.5, 16]) trees.push([sx * 4.75, z, 2.8, 9.5]);
+      for (const sx of [-1, 1]) for (const z of [-16, -8.5, 8.5, 16]) trees.push([z, sx * 4.75, 2.8, 9.5]);
       const rnd = seeded(53), inDomain = (x, z) => x > -42 && x < 48 && z > -50 && z < 62 || Math.abs(x) < 6 && z >= 62;
       for (let x = -63; x < 65; x += 7) for (let z = -63; z < 65; z += 7) {
         const px = x + (rnd() - 0.5) * 5, pz = z + (rnd() - 0.5) * 5;
