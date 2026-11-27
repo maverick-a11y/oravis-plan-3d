@@ -1394,9 +1394,10 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
       if (onZ) { const h = hemAt(TT, j === 0 ? 'zm' : 'zp', X(i) + L / 2, joined); y = h.y; z += (j === 0 ? 1 : -1) * h.w; }
       else { const h = hemAt(TT, i === 0 ? 'xm' : 'xp', Z(j) + Wd / 2, joined); y = h.y; x += (i === 0 ? 1 : -1) * h.w; }
       // Closed corner: only the last bay changes. The hem stays on top of the neighbouring pole and runs
-      // down in a straight, slightly scalloped line to a ground stake out on the diagonal, so the cloth slopes down at about 30°.
+      // down in a straight, slightly scalloped line to a ground stake right on the corner of the pole lines: where the
+      // two sides cross on the ground (and where crystal walls meet).
       for (const [cx, cz] of closed) {
-        const ex = cx * L / 2, ez = cz * Wd / 2, ax = cx * (L / 2 + 1.6), az = cz * (Wd / 2 + 1.6);   // stake ~2,3 m out on the diagonal: ~30° slope
+        const ex = cx * L / 2, ez = cz * Wd / 2, ax = ex, az = ez;   // stake on the corner itself
         let P = null, t = 0, nIn = [0, 0];
         if (onZ && Math.abs(Z(j) - ez) < 1e-6 && Math.abs(X(i) - ex) < sx - 1e-6) { t = 1 - Math.abs(X(i) - ex) / sx; P = [ex - cx * sx, ez]; nIn = [0, -cz]; }
         else if (onX && Math.abs(X(i) - ex) < 1e-6 && Math.abs(Z(j) - ez) < sz - 1e-6) { t = 1 - Math.abs(Z(j) - ez) / sz; P = [ex, ez - cz * sz]; nIn = [-cx, 0]; }
