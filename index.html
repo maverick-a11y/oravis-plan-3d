@@ -770,6 +770,10 @@ MAT.bloom = fixed(new THREE.MeshStandardMaterial({ color: '#f6f3ea', roughness: 
 MAT.bamboo = fixed(new THREE.MeshStandardMaterial({ color: '#cdb68a', roughness: 0.6 }));
 MAT.rope = fixed(new THREE.MeshStandardMaterial({ color: '#3a3d44', roughness: 0.8 }));
 MAT.concrete = fixed(new THREE.MeshStandardMaterial({ color: '#9b9a95', roughness: 0.95 }));
+MAT.water = fixed(new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.1, metalness: 0.1 }));
+MAT.deck = fixed(new THREE.MeshStandardMaterial({ color: '#9c7a5a', roughness: 0.8 }));
+MAT.lounger = fixed(new THREE.MeshStandardMaterial({ color: '#5f5c58', roughness: 0.7 }));
+MAT.whiteCloth = fixed(new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.8 }));
 
 /* Guy-line anchors. Each guy ends on a stake driven into the ground or, where the ground can't be staked, on a concrete
    ballast block. opts.ancrage: 'piquet' (all staked), 'lest' (all on blocks) or 'mixte', where opts.lest lists the guys
@@ -3283,6 +3287,28 @@ const KINDS = {
   },
   box: { label: 'Bloc', glyph: '■', color: '#98c1d9', build(g, prim) { box(g, 1, 1, 1, prim, 0, 0.5, 0); } },
   column: { label: 'Colonne', glyph: '▮', color: '#e8e6e1', build(g, prim) { cyl(g, 0.3, 0.3, 1, prim, 0, 0.5, 0, 32); } },
+  /* A venue's swimming pool, as an object so it can be moved and turned: the basin in a stone terrace 3,5 m wider at
+     each end and 2,8 m along the sides, and on one long side a wooden deck with sun loungers and closed parasols. */
+  pool: {
+    label: 'Piscine', glyph: '▭', color: '#e4d9c6',
+    opts: {
+      size: { label: 'Bassin', type: 'select', values: ['8x4', '10x4.4', '10x5', '12x6'], names: { '8x4': '8 × 4 m', '10x4.4': '10 × 4,40 m', '10x5': '10 × 5 m', '12x6': '12 × 6 m' }, def: '10x4.4' },
+      deck: { label: 'Deck bois, transats et parasols', type: 'bool', def: true },
+    },
+    build(g, prim, o) {
+      const [L, W] = String(o.size).split('x').map(Number), TL = L + 7, TW = W + 5.6;
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(L, W).rotateX(-PI / 2), MAT.water); water.position.y = 0.17; g.add(water);
+      const terr = [new THREE.BoxGeometry(TL, 0.15, TW).translate(0, 0.075, 0)];
+      for (const [w, d, x, z] of [[L + 0.9, 0.45, 0, -W / 2 - 0.22], [L + 0.9, 0.45, 0, W / 2 + 0.22], [0.45, W, -L / 2 - 0.22, 0], [0.45, W, L / 2 + 0.22, 0]]) terr.push(new THREE.BoxGeometry(w, 0.06, d).translate(x, 0.18, z));
+      g.add(new THREE.Mesh(mergeLocal(terr), prim));
+      if (!o.deck) return;
+      const dz = TW / 2 + 1.6, n = Math.floor((TL - 2) / 2.4), loungers = [], shades = [];
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(TL, 0.2, 3.2).translate(0, 0.1, dz), MAT.deck));
+      for (let k = 0; k < n; k++) { const x = (k - (n - 1) / 2) * 2.4; loungers.push(new THREE.BoxGeometry(0.7, 0.32, 1.9).translate(x, 0.36, dz + 0.1), new THREE.BoxGeometry(0.7, 0.5, 0.12).rotateX(-0.6).translate(x, 0.62, dz - 0.75)); }
+      for (const f of [-0.42, -0.14, 0.14, 0.42]) shades.push(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6).translate(f * TL, 1.5, dz - 1.3), new THREE.ConeGeometry(0.22, 1.5, 8).rotateX(PI).translate(f * TL, 2.2, dz - 1.3));
+      g.add(new THREE.Mesh(mergeLocal(loungers), MAT.lounger), new THREE.Mesh(mergeLocal(shades), MAT.whiteCloth));
+    },
+  },
 };
 
 const CATALOG = [
@@ -3406,6 +3432,7 @@ const CATALOG = [
     { kind: 'person', label: 'Silhouette', sub: '1,75 m · pour l\'échelle' },
     { kind: 'box', label: 'Bloc', sub: '1 × 1 × 1 m' },
     { kind: 'column', label: 'Colonne', sub: 'Ø 0,60 · h 1 m' },
+    { kind: 'pool', label: 'Piscine', sub: '10 × 4,40 m · terrasse et deck · du lieu, hors récap' },
   ]],
 ];
 
@@ -3836,6 +3863,7 @@ const VENUES = {
     // traced on the satellite view: 0,11 m per pixel (checked on the cars and the 10 × 4,4 m pool), origin in the middle
     // of the big lawn (pixel 620, 530); north is -z
     w: 170, d: 126,
+    items: [{ kind: 'pool', p: [-27.5, 0, 8.03], r: [0, 0.36, 0] }],   // placed when the venue is chosen
     build(G) {
       const S = 0.11, P = ([px, py]) => [(px - 620) * S, (py - 530) * S];
       const mat = (c, r = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: r, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
@@ -3871,20 +3899,7 @@ const VENUES = {
       strip([[440, 720], [650, 620], [750, 595], [800, 700], [840, 780]], 2.5, gravel, 0.08);                              // path along the north side of the mas
       strip([[0, 1078], [700, 990], [1542, 878]], 5, tarmac, 0.09);                                                          // road to the south
       strip([[1475, 880], [1500, 640], [1450, 420], [1390, 250], [1330, 110], [1300, 0]], 4.5, tarmac, 0.09);                // lane to the east
-      // pool 10 × 4,4 m, parallel to the mas, in a stone terrace 17 × 10 m; on the lawn side a wooden
-      // deck with sun loungers and closed white parasols
-      const [pX, pZ] = P([370, 603]), pRot = 0.36, onPool = (geo) => geo.rotateY(pRot).translate(pX, 0, pZ);
-      const water = new THREE.Mesh(onPool(new THREE.PlaneGeometry(10.2, 4.4).rotateX(-PI / 2)), new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.1, metalness: 0.1 }));
-      water.position.y = 0.17; G.add(water);
-      const terr = [new THREE.BoxGeometry(17, 0.15, 10).translate(0, 0.075, 0)];
-      for (const [w, d, x, z] of [[11, 0.45, 0, -2.42], [11, 0.45, 0, 2.42], [0.45, 4.4, -5.32, 0], [0.45, 4.4, 5.32, 0]]) terr.push(new THREE.BoxGeometry(w, 0.06, d).translate(x, 0.18, z));
-      G.add(new THREE.Mesh(onPool(mergeLocal(terr)), new THREE.MeshStandardMaterial({ color: '#e4d9c6', roughness: 0.9 })));
-      G.add(new THREE.Mesh(onPool(new THREE.BoxGeometry(17, 0.2, 3.2).translate(0, 0.1, 6.6)), new THREE.MeshStandardMaterial({ color: '#9c7a5a', roughness: 0.8 })));
-      const loungers = [], shades = [];
-      for (let k = 0; k < 6; k++) loungers.push(new THREE.BoxGeometry(0.7, 0.32, 1.9).translate(-6 + k * 2.4, 0.36, 6.7), new THREE.BoxGeometry(0.7, 0.5, 0.12).rotateX(-0.6).translate(-6 + k * 2.4, 0.62, 5.85));
-      for (const x of [-7.2, -2.4, 2.4, 7.2]) shades.push(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6).translate(x, 1.5, 5.3), new THREE.ConeGeometry(0.22, 1.5, 8).rotateX(PI).translate(x, 2.2, 5.3));
-      G.add(new THREE.Mesh(onPool(mergeLocal(loungers)), new THREE.MeshStandardMaterial({ color: '#5f5c58', roughness: 0.7 })));
-      G.add(new THREE.Mesh(onPool(mergeLocal(shades)), new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.8 })));
+      const [pX, pZ] = P([370, 603]);   // the pool itself is an object (KINDS.pool) placed here, so it can be moved
       // the mas: old stone farmhouse in several blocks under weathered tile roofs, turned about 20°
       const stone = '#a8957a', roofA = new THREE.MeshStandardMaterial({ color: '#8f6f58', roughness: 0.95 }), roofB = new THREE.MeshStandardMaterial({ color: '#a8735a', roughness: 0.95 });
       const face = (w, h) => venueFacade(w, h, { stone, shutter: '#cfc8b8', rows: h > 6.5 ? [[1, 2.2], [4.2, 1.6]] : [[1, 2.2]], bays: Math.max(2, Math.round(w / 3.5)) });
@@ -3900,7 +3915,7 @@ const VENUES = {
         }
         G.add(new THREE.Mesh(mergeLocal(rows), new THREE.MeshStandardMaterial({ color: '#8e88a6', roughness: 1 }))); }
       // behind the lavender (north side) the ground climbs a 5 m grass bank to an upper level 2,5 m higher, reached by
-      // stone steps at the east end of the field
+      // garden steps along the south side of the field
       const LA = P([690, 290]), LB = P([860, 195]), LD = P([830, 515]), UP = 2.5, BANK = 5, TOP = 12;
       const uLen = Math.hypot(LB[0] - LA[0], LB[1] - LA[1]), ux = (LB[0] - LA[0]) / uLen, uz = (LB[1] - LA[1]) / uLen;
       let nx = uz, nz = -ux; if (nx * (LD[0] - LA[0]) + nz * (LD[1] - LA[1]) > 0) { nx = -nx; nz = -nz; }
@@ -3915,9 +3930,13 @@ const VENUES = {
           const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.computeVertexNormals();
           const m = new THREE.Mesh(bg, new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide, flatShading: true })); m.receiveShadow = true; G.add(m);
         }
-        const steps = [], sa = uLen - 3, n = 10;
-        for (let k = 0; k < n; k++) { const h = (k + 1) * UP / n, [x, , z] = at(sa, (k + 0.5) * BANK / n, 0); steps.push(new THREE.BoxGeometry(1.8, h, BANK / n + 0.02).rotateY(-Math.atan2(uz, ux)).translate(x, h / 2, z)); }
-        for (const side of [-1.1, 1.1]) { const [x0, , z0] = at(sa + side, 0, 0), [x1, , z1] = at(sa + side, BANK, 0); steps.push(stick([x0, 0.25, z0], [x1, UP + 0.25, z1], 0.12, 0.12, 6)); }
+        // garden steps along the south side of the lavender, from the big lawn (west) up toward the gravel (east)
+        const LC = P([950, 420]); let ex = LC[1] - LD[1], ez = LD[0] - LC[0]; { const l = Math.hypot(ex, ez); ex /= l; ez /= l; }
+        if (ex * (LA[0] - LD[0]) + ez * (LA[1] - LD[1]) > 0) { ex = -ex; ez = -ez; }   // away from the field
+        const dl = Math.hypot(LC[0] - LD[0], LC[1] - LD[1]), dx = (LC[0] - LD[0]) / dl, dz = (LC[1] - LD[1]) / dl;
+        const s0 = [LD[0] - dx * 13.5 + ex * 1.6, LD[1] - dz * 13.5 + ez * 1.6], s1 = [LC[0] + dx * 5 + ex * 1.6, LC[1] + dz * 5 + ez * 1.6];
+        const run = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]), dir = -Math.atan2(dz, dx), n = 22, RISE = 1.2, steps = [];
+        for (let k = 0; k < n; k++) { const h = 0.1 + k * (RISE - 0.1) / (n - 1), t = (k + 0.5) / n; steps.push(new THREE.BoxGeometry(run / n + 0.02, h, 1.8).rotateY(dir).translate(s0[0] + (s1[0] - s0[0]) * t, h / 2, s0[1] + (s1[1] - s0[1]) * t)); }
         G.add(new THREE.Mesh(mergeLocal(steps), new THREE.MeshStandardMaterial({ color: '#cdbfa3', roughness: 0.9 }))); }
       // trees: the belt along the field edge, the wood to the east, specimen trees by the mas; cypress rows
       const clear = [LAWN, LAWN_E, LAWN_W, PARK, PARK_N, COURT, DECK].map((p) => p.map(P));
@@ -4020,8 +4039,11 @@ for (const id of ['#roomType', '#roomW', '#roomD']) $(id).addEventListener('chan
   // coming back from a modelled venue: start again from the usual 20 × 14 m instead of the venue's size
   const w = leaving ? 20 : Math.min(200, Math.max(4, Math.round(+$('#roomW').value || room.w)));
   const d = leaving ? 14 : Math.min(200, Math.max(4, Math.round(+$('#roomD').value || room.d)));
+  const entering = VENUES[type] && room.type !== type;
   room = { type, w, d };
   buildRoom();
+  // a venue's own movable pieces (its pool…) come with it, unless the plan already has one
+  if (entering) for (const it of VENUES[type].items || []) if (!objects.some((o) => o.userData.kind === it.kind)) addObject(it.kind, it);
   commit();
 });
 
@@ -5132,7 +5154,7 @@ let aiSample = null, aiDict = null, aiPlan = null, aiCtl = null, localVoiceStop 
 function aiCatalogue() {
   const lines = [];
   for (const [kind, def] of Object.entries(KINDS)) {
-    if (['person', 'box', 'column'].includes(kind)) continue;
+    if (['person', 'box', 'column', 'pool'].includes(kind)) continue;
     const opts = Object.entries(def.opts || {}).filter(([, d]) => !d.hidden).map(([k, d]) => {
       if (d.type === 'select') return `${k} (${d.label}) : ${d.values.map((v) => (d.names?.[v] && d.names[v] !== String(v) ? `${v} = ${d.names[v]}` : v)).join(' | ')} [défaut ${d.def}]`;
       if (d.type === 'number') return `${k} (${d.label}) : nombre de ${d.min} à ${d.max}, pas de ${d.step} [défaut ${d.def}]`;
@@ -5176,7 +5198,7 @@ DEMANDE : « ${request} »`;
 }
 function aiClean(it) {
   const def = KINDS[it?.kind];
-  if (!def?.build || ['person', 'box', 'column'].includes(it.kind)) return null;
+  if (!def?.build || ['person', 'box', 'column', 'pool'].includes(it.kind)) return null;
   const opts = {};
   for (const [k, v] of Object.entries(it.opts && typeof it.opts === 'object' ? it.opts : {})) {
     const d = def.opts?.[k];
