@@ -849,9 +849,10 @@ function sailGeo(a, b, c, d) {
 /* Tente stretch: membrane relaxed as a minimal-ish surface (Laplace) between perimeter pole tops at 3 m,
    scalloped edges that dip and pull inward between poles, and two 4 m centre masts forming the peaks. */
 // Stretch tent sizes: covered length L (x) × width W (z), pole spacing, perimeter height, masts.
+// A 7,5 m side has a single intermediate pole, in its middle (spacing 3,75 m).
 const STRETCH = {
-  '7.5x5.25': { name: '7,5 × 5,25 m', L: 7.5, W: 5.25, sx: 2.5, sz: 2.625, H: 2.7, peak: 3.8, R: 2.6, peaks: [[0, 0]] },
-  '10.5x7.5': { name: '10,5 × 7,5 m', L: 10.5, W: 7.5, sx: 3.5, sz: 2.5, H: 3, peak: 4, R: 3.6, peaks: [[0, 0]] },
+  '7.5x5.25': { name: '7,5 × 5,25 m', L: 7.5, W: 5.25, sx: 3.75, sz: 2.625, H: 2.7, peak: 3.8, R: 2.6, peaks: [[0, 0]] },
+  '10.5x7.5': { name: '10,5 × 7,5 m', L: 10.5, W: 7.5, sx: 3.5, sz: 3.75, H: 3, peak: 4, R: 3.6, peaks: [[0, 0]] },
   '10.5x10.5': { name: '10,5 × 10,5 m', L: 10.5, W: 10.5, sx: 3.5, sz: 3.5, H: 3, peak: 4, R: 4.5, peaks: [[0, 0]] },
   '15x10.5': { name: '10,5 × 15 m', L: 15, W: 10.5, sx: 3.75, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-2.5, 0], [2.5, 0]] },
   '21x10.5': { name: '10,5 × 21 m', L: 21, W: 10.5, sx: 4.2, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-5, 0], [0, 0], [5, 0]] },
@@ -1343,14 +1344,14 @@ function addJoint(g, prim, a, b, H) {
   }
   g.add(new THREE.Mesh(mergeLocal(rings), MAT.metal));
 }
-/* Crystal walls (clear PVC), only with the corners down to the ground: on every free side, a vertical clear panel
+/* Crystal walls (clear PVC), with the corners open or down to the ground: on every chosen side, a vertical clear panel
    from the ground up to the hem, following its scallops, with a 30 cm band of the tent's own fabric at the bottom.
    At a closed corner the panel climbs from the corner stake to the first pole (on a short side that is the single
-   middle pole: a triangle); at a corner left open by a joint (two tents hooked together) it runs on to the corner
-   pole. Sides hooked to another tent or fixed to a wall get no panel. */
+   middle pole: a triangle); at an open corner (or one left open by a joint) it runs on to the corner pole and stops
+   there. Sides hooked to another tent or fixed to a wall get no panel. */
 const CRYSTAL_BAND = 0.3;
 const CRYSTAL_SIDES = [['zm', 'crB', 'arrière'], ['zp', 'crF', 'avant'], ['xm', 'crL', 'gauche'], ['xp', 'crR', 'droit']];
-const crystalSides = (o) => (o.corners === 'fermes' ? CRYSTAL_SIDES.filter(([, key]) => o[key]).map(([k]) => k) : []);
+const crystalSides = (o) => CRYSTAL_SIDES.filter(([, key]) => o[key]).map(([k]) => k);
 const crystalLen = (o) => { const T = stretchT(o), j = jnOf(o); return Math.ceil(crystalSides(o).filter((k) => !j[k]).reduce((t, k) => t + sideLen(T, k), 0)); };
 const SIDE_CORNERS = { zm: [[-1, -1], [1, -1]], zp: [[-1, 1], [1, 1]], xm: [[-1, -1], [-1, 1]], xp: [[1, -1], [1, 1]] };
 function addCrystal(g, prim, T, joined, at, closed, sides) {
@@ -3043,11 +3044,11 @@ const KINDS = {
       wallL: { label: 'Côté gauche fixé à un mur', type: 'bool', def: false },
       wallR: { label: 'Côté droit fixé à un mur', type: 'bool', def: false },
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
-      // clear walls, side by side: only with the corners down to the ground
-      crB: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté arrière', type: 'bool', def: false },
-      crF: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté avant', type: 'bool', def: false },
-      crL: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté gauche', type: 'bool', def: false },
-      crR: { when: (o) => o.corners === 'fermes', label: 'Paroi cristal côté droit', type: 'bool', def: false },
+      // clear walls, side by side, with the corners open or down to the ground
+      crB: { label: 'Paroi cristal côté arrière', type: 'bool', def: false },
+      crF: { label: 'Paroi cristal côté avant', type: 'bool', def: false },
+      crL: { label: 'Paroi cristal côté gauche', type: 'bool', def: false },
+      crR: { label: 'Paroi cristal côté droit', type: 'bool', def: false },
       jn: { hidden: true, def: '' },   // joined sides, set automatically when another tent is brought alongside
       guys: { label: 'Haubans', type: 'bool', def: true },
       ...ANCHOR_OPTS,
