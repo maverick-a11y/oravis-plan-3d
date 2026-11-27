@@ -347,6 +347,7 @@ table.quote { width: 100%; border-collapse: collapse; font-size: 12.3px; }
 /* Lights settings popover (bulb glare + light cast), above the dock */
 .vp-look { position: absolute; z-index: 6; left: 50%; bottom: 150px; transform: translateX(-50%); width: 320px; padding: 12px 14px; display: grid; gap: 10px; }
 .vp-look .row { grid-template-columns: 78px minmax(0, 1fr) 46px; }
+.vp-look select { grid-column: 2 / 4; font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--fg); }
 .vp-look .note { font-size: 11px; }
 @media (max-width: 1100px), (pointer: coarse) and (max-width: 1400px) {
   .vp-look { position: fixed; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); width: auto; transform: none; bottom: calc(132px + env(safe-area-inset-bottom, 0px)); z-index: 31; }
@@ -497,6 +498,7 @@ body.viewer .vw-choices:not([hidden]) { display: grid; gap: 8px; position: absol
   </div>
 
   <div class="vp-look glass" id="lookBar" hidden role="group" aria-label="Réglages des lumières">
+    <label class="row"><span>Heure</span><select id="lkTime" aria-label="Heure de la journée"><option value="matin">Matin</option><option value="midi">Midi</option><option value="aprem">Fin d'après-midi</option><option value="coucher">Coucher de soleil</option><option value="nuit">Soirée (nuit)</option></select><output></output></label>
     <label class="row"><span>Ampoules</span><input id="lkBulbs" type="range" min="0" max="150" step="5" aria-label="Intensité des ampoules"><output id="vBulbs"></output></label>
     <label class="row"><span>Éclairage</span><input id="lkLight" type="range" min="0" max="200" step="5" aria-label="Éclairage projeté par les lumières"><output id="vLight"></output></label>
     <p class="note">Ampoules : brillance des ampoules (éblouissement). Éclairage : lumière projetée par les guirlandes, projecteurs et carrousels sur le décor. Réglage gardé sur cet appareil.</p>
@@ -511,12 +513,13 @@ body.viewer .vw-choices:not([hidden]) { display: grid; gap: 8px; position: absol
     <div class="vp-views">
       <button class="btn" type="button" id="btn3D" title="Vue 3D"><svg class="i" viewBox="0 0 24 24"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg><span class="lbl">Vue 3D</span></button>
       <button class="btn" type="button" id="btnTop" title="Vue de dessus (T)"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg><span class="lbl">Dessus</span><kbd>T</kbd></button>
+      <button class="btn" type="button" id="btnGuest" title="Vue à hauteur d'invité (G) : chaque clic fait le tour"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><path d="M8 21v-6l-1-4a5 5 0 0 1 10 0l-1 4v6"/></svg><span class="lbl">Invité</span></button>
       <button class="btn" type="button" id="btnSee" aria-pressed="false" title="Voir sous les toiles (V)"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">Sous toiles</span></button>
       <button class="btn" type="button" id="btnNight" aria-pressed="false" title="Vue de nuit pour voir les éclairages (N)"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="lbl">Soirée</span></button>
       <button class="btn" type="button" id="btnLook" aria-pressed="false" aria-expanded="false" title="Réglage des ampoules et de l'éclairage"><svg class="i" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span class="lbl">Lumières</span></button>
     </div>
     <span class="vsep"></span>
-    <button class="btn" type="button" id="btnPng" hidden title="Télécharger une image du plan"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><span class="lbl">Image</span></button>
+    <button class="btn" type="button" id="btnPng" hidden title="Télécharger une photo HD de la vue"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg><span class="lbl">Photo HD</span></button>
   </nav>
 
   <aside class="panel right glass">
@@ -778,7 +781,11 @@ MAT.bloom = fixed(new THREE.MeshStandardMaterial({ color: '#f6f3ea', roughness: 
 MAT.bamboo = fixed(new THREE.MeshStandardMaterial({ color: '#cdb68a', roughness: 0.6 }));
 MAT.rope = fixed(new THREE.MeshStandardMaterial({ color: '#3a3d44', roughness: 0.8 }));
 MAT.concrete = fixed(new THREE.MeshStandardMaterial({ color: '#9b9a95', roughness: 0.95 }));
-MAT.water = fixed(new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.1, metalness: 0.1 }));
+MAT.water = fixed(new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.06, metalness: 0.3 }));   // reflects the sky
+MAT.petals = ['#f3c6cf', '#ffffff', '#ead9a8', '#e7a9b6'].map((c) => fixed(new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 })));
+MAT.leaf = fixed(new THREE.MeshStandardMaterial({ color: '#6f8a58', roughness: 0.9 }));
+MAT.wax = fixed(new THREE.MeshStandardMaterial({ color: '#f4ecdc', roughness: 0.7 }));
+MAT.cushion = fixed(new THREE.MeshStandardMaterial({ color: '#ece3d1', roughness: 0.95 }));
 MAT.deck = fixed(new THREE.MeshStandardMaterial({ color: '#9c7a5a', roughness: 0.8 }));
 MAT.lounger = fixed(new THREE.MeshStandardMaterial({ color: '#5f5c58', roughness: 0.7 }));
 MAT.crystal = fixed(new THREE.MeshStandardMaterial({ color: '#e4f2f7', transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
@@ -1865,6 +1872,22 @@ const slatTex = (() => {
   return t;
 })();
 
+/* Table centrepiece (decoration only, not in the récap): a low bouquet in a white vase, or three pillar candles
+   whose flames glow in the evening view. */
+const DECO_OPT = { label: 'Centre de table (déco)', type: 'select', values: ['aucun', 'fleurs', 'bougies'], names: { aucun: 'Aucun', fleurs: 'Bouquet de fleurs', bougies: 'Bougies' }, def: 'fleurs' };
+function centrepiece(g, kind, y) {
+  if (kind === 'fleurs') {
+    const rnd = seeded(7), petals = MAT.petals.map(() => []), leaves = [new THREE.CylinderGeometry(0.06, 0.045, 0.14, 14).translate(0, y + 0.07, 0)];
+    for (let i = 0; i < 14; i++) { const a = rnd() * PI * 2, d = rnd() * 0.11; petals[i % petals.length].push(new THREE.IcosahedronGeometry(0.035 + rnd() * 0.02, 1).translate(Math.cos(a) * d, y + 0.17 + rnd() * 0.06, Math.sin(a) * d)); }
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * PI * 2; leaves.push(new THREE.SphereGeometry(0.04, 6, 4).scale(1.6, 0.5, 0.8).rotateY(-a).translate(Math.cos(a) * 0.12, y + 0.15, Math.sin(a) * 0.12)); }
+    g.add(new THREE.Mesh(mergeLocal([leaves[0]]), MAT.wax), new THREE.Mesh(mergeLocal(leaves.slice(1)), MAT.leaf));
+    petals.forEach((p, k) => p.length && g.add(new THREE.Mesh(mergeLocal(p), MAT.petals[k])));
+  } else if (kind === 'bougies') {
+    const wax = [], flame = [];
+    [[-0.08, 0.12], [0.06, 0.18], [0.0, 0.24]].forEach(([dx, h], i) => { const dz = i === 2 ? -0.07 : 0.03; wax.push(new THREE.CylinderGeometry(0.035, 0.035, h, 16).translate(dx, y + h / 2, dz)); flame.push(new THREE.SphereGeometry(0.012, 8, 6).scale(1, 1.8, 1).translate(dx, y + h + 0.02, dz)); });
+    g.add(new THREE.Mesh(mergeLocal(wax), MAT.wax), new THREE.Mesh(mergeLocal(flame), MAT.bulb));
+  }
+}
 function bambooPole(x, z, h) {
   const parts = [new THREE.CylinderGeometry(0.042, 0.048, h, 10).translate(x, h / 2, z)];
   for (let y = 0.4; y < h - 0.1; y += 0.45) parts.push(new THREE.CylinderGeometry(0.051, 0.051, 0.025, 10).translate(x, y, z));
@@ -2624,7 +2647,7 @@ function stoolIndus(g, x0 = 0, z0 = 0) {
 const KINDS = {
   tround: {
     label: 'Table ronde', glyph: '◉', color: '#f6f3ec', colorLabel: 'Nappe / plateau',
-    opts: { diam: { label: 'Diamètre', type: 'select', values: [150, 180], suffix: ' cm', def: 180 }, seats: { label: 'Chaises', type: 'select', values: [0, 4, 6, 8, 10, 12], def: 10 }, cloth: { label: 'Nappe', type: 'bool', def: true }, chairModel: CHAIR_MODEL, chairColor: CHAIR_COLOR },
+    opts: { diam: { label: 'Diamètre', type: 'select', values: [150, 180], suffix: ' cm', def: 180 }, seats: { label: 'Chaises', type: 'select', values: [0, 4, 6, 8, 10, 12], def: 10 }, cloth: { label: 'Nappe', type: 'bool', def: true }, deco: DECO_OPT, chairModel: CHAIR_MODEL, chairColor: CHAIR_COLOR },
     build(g, prim, o) {
       const r = (o.diam || 180) / 200;
       if (o.cloth) cyl(g, r + 0.02, r + 0.1, 0.76, prim, 0, 0.38, 0, 48);
@@ -2633,6 +2656,7 @@ const KINDS = {
       // chairs pulled in as when someone sits (seat front under the top; with a floor-length cloth they stop at the cloth)
       const rc = r + (o.cloth ? 0.3 : 0.16);
       for (let i = 0; i < o.seats; i++) { const a = (i / o.seats) * PI * 2; chair(g, cm, rc * Math.sin(a), rc * Math.cos(a), a + PI, o.chairModel); }
+      centrepiece(g, o.deco, 0.76);
     },
     quote: (o) => {
       const sfx = o.diam === 150 ? '_150' : '';
@@ -2824,7 +2848,11 @@ const KINDS = {
   },
   sofa: {
     label: 'Canapé', glyph: '▬', color: '#3f5e5a',
-    build(g, prim) { box(g, 1.6, 0.42, 0.8, prim, 0, 0.21, 0); box(g, 1.6, 0.45, 0.16, prim, 0, 0.62, -0.32); box(g, 0.16, 0.58, 0.8, prim, -0.72, 0.29, 0); box(g, 0.16, 0.58, 0.8, prim, 0.72, 0.29, 0); },
+    build(g, prim) {
+      box(g, 1.6, 0.42, 0.8, prim, 0, 0.21, 0); box(g, 1.6, 0.45, 0.16, prim, 0, 0.62, -0.32); box(g, 0.16, 0.58, 0.8, prim, -0.72, 0.29, 0); box(g, 0.16, 0.58, 0.8, prim, 0.72, 0.29, 0);
+      // two loose cushions against the back
+      g.add(new THREE.Mesh(mergeLocal([-0.36, 0.36].map((x, i) => new THREE.SphereGeometry(0.2, 14, 10).scale(1.1, 1, 0.42).rotateZ(i ? -0.12 : 0.12).translate(x, 0.62, -0.18))), MAT.cushion));
+    },
     quote: () => ({ canape: 1 }),
   },
   bamboo: {
@@ -3365,8 +3393,10 @@ const KINDS = {
     quote: () => ({ eclairage: 1 }),
   },
   person: {
-    label: 'Silhouette', glyph: '◍', color: '#8a93a3',
-    build(g, prim) { cyl(g, 0.15, 0.11, 0.85, prim, 0, 0.425, 0, 16); cyl(g, 0.2, 0.16, 0.62, prim, 0, 1.16, 0, 16); sph(g, 0.11, prim, 0, 1.62, 0); },
+    label: 'Invité', glyph: '◍', color: '#8a93a3', noColor: true,
+    opts: { look: { label: 'Tenue', type: 'select', values: [1, 2, 3, 4, 5, 6, 7, 8], def: 1 } },
+    // a standing guest (same figures as on the dance floor, arms down), for the scale and to bring the plan to life
+    build(g, prim, o) { const p = makeDancer(seeded(o.look * 7919 + 11)); delete p.userData.dancer; p.position.y = 0.01; g.add(p); },
   },
   box: { label: 'Bloc', glyph: '■', color: '#98c1d9', build(g, prim) { box(g, 1, 1, 1, prim, 0, 0.5, 0); } },
   column: { label: 'Colonne', glyph: '▮', color: '#e8e6e1', build(g, prim) { cyl(g, 0.3, 0.3, 1, prim, 0, 0.5, 0, 32); } },
@@ -3595,7 +3625,7 @@ const CATALOG = [
     { kind: 'carouselN', label: 'Carrousel Nostalgie 1886', sub: 'Ø 4 m · h 3 m · 13 personnes · 220 V 16 A' },
   ]],
   ['Repères (hors récap)', [
-    { kind: 'person', label: 'Silhouette', sub: '1,75 m · pour l\'échelle' },
+    { kind: 'person', label: 'Invité', sub: '1,75 m · pour l\'échelle · 8 tenues' },
     { kind: 'box', label: 'Bloc', sub: '1 × 1 × 1 m' },
     { kind: 'column', label: 'Colonne', sub: 'Ø 0,60 · h 1 m' },
     { kind: 'pool', label: 'Piscine', sub: '10 × 4,40 m · terrasse et deck · du lieu, hors récap' },
@@ -3643,6 +3673,51 @@ const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 /* Reflections from an outdoor sky rather than a bright studio room: blue above, warm haze at the horizon, grass
    below. Much softer, so white fabrics keep their folds instead of burning out. */
+/* Light surface textures, drawn once (grey, so they only shade the material's own colour) and mapped in world
+   metres (worldUV), so they tile the same on every shape: mown grass in bands, gravel, Provençal roof tiles. */
+function noiseTex(size, draw) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  draw(c.getContext('2d'), size, seeded(size + draw.length));
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+const GRASS_TEX = noiseTex(256, (x, n, rnd) => {
+  for (let b = 0; b < 2; b++) { x.fillStyle = b ? '#f4f4f4' : '#eaeaea'; x.fillRect(0, b * n / 2, n, n / 2); }   // mowing bands
+  for (let i = 0; i < 2600; i++) { const v = 200 + rnd() * 55 | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(rnd() * n, rnd() * n, 1 + rnd() * 2, 2 + rnd() * 3); }
+});
+const GRAVEL_TEX = noiseTex(256, (x, n, rnd) => {
+  x.fillStyle = '#ebebeb'; x.fillRect(0, 0, n, n);
+  for (let i = 0; i < 5000; i++) { const v = 175 + rnd() * 80 | 0, r = 0.6 + rnd() * 1.8; x.fillStyle = `rgb(${v},${v},${v})`; x.beginPath(); x.arc(rnd() * n, rnd() * n, r, 0, 7); x.fill(); }
+});
+const TILE_TEX = noiseTex(128, (x, n, rnd) => {
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 8; col++) {   // barrel tiles: a lit crown and darker channels, rows offset
+    const x0 = (col + (row % 2) * 0.5) * n / 8, y0 = row * n / 4, v = 200 + rnd() * 40 | 0;
+    const g = x.createLinearGradient(x0, 0, x0 + n / 8, 0); g.addColorStop(0, `rgb(${v - 60},${v - 60},${v - 60})`); g.addColorStop(0.5, `rgb(${v},${v},${v})`); g.addColorStop(1, `rgb(${v - 60},${v - 60},${v - 60})`);
+    x.fillStyle = g; x.fillRect(x0, y0, n / 8, n / 4); if (x0 + n / 8 > n) x.fillRect(x0 - n, y0, n / 8, n / 4);
+    x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(0, y0 + n / 4 - 2, n, 2);
+  }
+});
+// Map a material's texture by world position instead of the shape's own UVs: ground planes on x / z, roofs along the
+// eaves (x + z) and up the slope (y).
+function worldUV(mat, sx, sy = sx, mode = 'ground') {
+  const expr = mode === 'roof' ? `vec2((wp.x + wp.z) * ${sx.toFixed(4)}, wp.y * ${sy.toFixed(4)})` : `wp.xz * ${sx.toFixed(4)}`;
+  mat.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <uv_vertex>', `#include <uv_vertex>\n#ifdef USE_MAP\n  { vec4 wp = modelMatrix * vec4(position, 1.0); vMapUv = ${expr}; }\n#endif`); };
+  mat.customProgramCacheKey = () => `wuv-${mode}-${sx}-${sy}`;
+  mat.needsUpdate = true;
+  return mat;
+}
+// Give a venue's flat ground surfaces their texture by colour: green → grass, the rest (paths, gravel, paving) → gravel.
+function texturize(group) {
+  group.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || !o.material.isMeshStandardMaterial || o.material.map || o.material.transparent) return;
+    if (o.material.roughness < 0.5 || o.material.side === THREE.DoubleSide) return;   // water, cloth and cane roofs keep their look
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox; if (bb.max.y - bb.min.y > 0.06 && !(o.geometry.type === 'ShapeGeometry' || o.geometry.type === 'PlaneGeometry')) return;
+    const c = o.material.color, green = c.g > c.r * 1.05 && c.g > c.b;
+    o.material.map = green ? GRASS_TEX : GRAVEL_TEX;
+    worldUV(o.material, green ? 1 / 6 : 1 / 2.5);
+  });
+}
 function skyEnv() {
   const env = new THREE.Scene(), geo = new THREE.SphereGeometry(50, 32, 16), p = geo.attributes.position, col = [];
   const top = new THREE.Color('#8fb3de'), hor = new THREE.Color('#f1e8d8'), gnd = new THREE.Color('#5d6a45');
@@ -3693,14 +3768,22 @@ function walk(fwd, side) {
   orbit.target.add(_mv); camera.position.add(_mv);
 }
 
-const DAY = { sun: 2.4, hemi: 0.55 }, SUN_DIR = [10, 11, 7];   // late-afternoon sun: warmer, longer shadows
-const sun = new THREE.DirectionalLight(0xffffff, DAY.sun);
-sun.position.set(...SUN_DIR);
+/* Time of day: sun direction, colour and strength, sky light, sky colours. "nuit" is the evening view (toggleNight). */
+const TIMES = {
+  matin: { name: 'Matin', dir: [-10, 9, 7], sun: '#fff0da', si: 2.2, hemi: '#d8e7f7', hg: '#7b8858', hi: 0.6, top: '#9cc2ea', bot: '#eef3f3', exp: 1.0 },
+  midi: { name: 'Midi', dir: [3, 18, 4], sun: '#fffaf0', si: 2.6, hemi: '#d4e3f5', hg: '#7b8858', hi: 0.55, top: '#74a5df', bot: '#e5eef5', exp: 0.95 },
+  aprem: { name: 'Fin d\'après-midi', dir: [10, 11, 7], sun: '#ffe9cc', si: 2.4, hemi: '#d4e3f5', hg: '#7b8858', hi: 0.55, top: '#86ade0', bot: '#e9eef1', exp: 1.0 },
+  coucher: { name: 'Coucher de soleil', dir: [14, 3.2, 6], sun: '#ffad66', si: 2.3, hemi: '#f2c7a2', hg: '#5e5440', hi: 0.45, top: '#6d8cc6', bot: '#f7c08a', exp: 1.08 },
+};
+let tod = 'aprem';
+const T_ = () => TIMES[tod] || TIMES.aprem;
+const sun = new THREE.DirectionalLight(0xffffff, T_().si);
+sun.position.set(...T_().dir);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
-const hemi = new THREE.HemisphereLight('#d4e3f5', '#7b8858', DAY.hemi);
+const hemi = new THREE.HemisphereLight('#d4e3f5', '#7b8858', T_().hi);
 sun.color.set('#ffe9cc');
 sun.shadow.radius = 3;
 scene.add(sun, sun.target, hemi);
@@ -3722,16 +3805,16 @@ composer.addPass(bloom);
 composer.addPass(new OutputPass());
 // Ground all round the plan, fading into the haze at the horizon: meadow outdoors, light grey around a hall.
 const meadowColor = () => { try { return room.type === 'salle' ? '#cfd2d4' : '#a7b383'; } catch (e) { return '#a7b383'; } };   // room is set up further down
-const meadow = new THREE.Mesh(new THREE.CircleGeometry(420, 72).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#a7b383', roughness: 1 }));
+const meadow = new THREE.Mesh(new THREE.CircleGeometry(420, 72).rotateX(-PI / 2), worldUV(new THREE.MeshStandardMaterial({ color: '#a7b383', roughness: 1, map: GRASS_TEX }), 1 / 6));
 meadow.position.y = -0.05; meadow.receiveShadow = true; scene.add(meadow);
 function setLook() {
   // Day: crisp sun with a light glow on bulbs. Night: moonlit blue fill, bright bloom, visible beams.
   Object.assign(bloom, night ? { strength: 0.45, radius: 0.4, threshold: 1.25 } : { strength: 0.2, radius: 0.3, threshold: 1.6 });
   BEAM.strength.value = night ? 0.25 : 0.06;
-  renderer.toneMappingExposure = 1.0;
-  sun.color.set(night ? '#7f98d6' : '#ffe9cc');
-  hemi.color.set(night ? '#30406e' : '#d4e3f5');
-  hemi.groundColor.set(night ? '#10141f' : '#7b8858');
+  renderer.toneMappingExposure = night ? 1.15 : T_().exp;
+  sun.color.set(night ? '#7f98d6' : T_().sun);
+  hemi.color.set(night ? '#30406e' : T_().hemi);
+  hemi.groundColor.set(night ? '#10141f' : T_().hg);
   meadow.material.color.set(night ? '#4b5640' : meadowColor());
 }
 setLook();
@@ -3766,13 +3849,13 @@ function makeSky(top, bottom) {
 function applyTheme() {
   const cs = getComputedStyle(document.documentElement);
   const tok = (n) => cs.getPropertyValue(n).trim();
-  const top = night ? '#050813' : '#86ade0', bottom = night ? '#121a2c' : '#e9eef1';   // a real sky, whatever the interface theme
+  const top = night ? '#050813' : T_().top, bottom = night ? '#121a2c' : T_().bot;   // a real sky, whatever the interface theme
   skyTex?.dispose();
   skyTex = makeSky(top, bottom);
   scene.background = skyTex;
   scene.fog = new THREE.Fog(bottom, scene.fog?.near ?? 60, scene.fog?.far ?? 190);   // keeps the range set for the venue size
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
-  grid = new THREE.GridHelper(120, 120, '#6f7b5a', '#8e9a74');   // 1 m squares, faint on the grass
+  grid = night ? new THREE.GridHelper(120, 120, '#1e2433', '#171c28') : new THREE.GridHelper(120, 120, '#6f7b5a', '#8e9a74');   // 1 m squares, faint on the grass
   grid.material.transparent = true; grid.material.opacity = 0.28;
   grid.position.y = -0.03;
   scene.add(grid);
@@ -3839,6 +3922,7 @@ function venueFacade(w, h, opts) {
   const ppm = 24, c = document.createElement('canvas'); c.width = Math.round(w * ppm); c.height = Math.round(h * ppm);
   const x = c.getContext('2d'), { stone, shutter, rows, bays, arch } = opts;
   x.fillStyle = stone; x.fillRect(0, 0, c.width, c.height);
+  { const rnd = seeded(c.width * 7 + c.height); for (let i = 0; i < c.width * c.height / 40; i++) { x.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.08)'; x.fillRect(rnd() * c.width, rnd() * c.height, 3 + rnd() * 9, 2 + rnd() * 5); } }   // rubble stones
   x.fillStyle = 'rgba(0,0,0,0.05)'; for (let i = 0; i < c.height; i += 14) x.fillRect(0, i, c.width, 1);   // stone courses
   const bw = c.width / bays;
   for (const [y0, wh, small] of rows) {
@@ -3862,7 +3946,33 @@ function hipRoof(w, d, h, mat) {
   const faces = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]], pos = [];
   for (const [a, b, c2, e] of faces) for (const k of [a, c2, b, a, e, c2]) pos.push(...v[k]);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  if (!mat.map) { mat.map = TILE_TEX; worldUV(mat, 1 / 1.6, 1 / 1.2, 'roof'); }   // barrel tiles in rows
   const m = new THREE.Mesh(g, mat); m.material.side = THREE.DoubleSide; return m;
+}
+/* Trees for the venues: each crown is three overlapping clumps in slightly different greens, on a trunk; olive
+   trees are smaller, silvery and more open. Cypresses are slim flame shapes. */
+const FOREST = ['#3f5d2d', '#4a6a33', '#56743a', '#365224'], OLIVE = ['#8c9a78', '#97a585', '#7f8f6c'];
+function plantTrees(G, trees, palette = FOREST, yOf = () => 0) {
+  if (!trees.length) return;
+  const n = trees.length, crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), n * 3);
+  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.2, 0.32, 1, 7).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), n);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), rnd = seeded(n * 13 + 5);
+  trees.forEach(([x, z, r, h], i) => {
+    const y0 = yOf(x, z), cy = y0 + h - r * 0.6, a = rnd() * PI * 2;
+    const clumps = [[0, 0, 0, 1], [Math.cos(a) * r * 0.5, -r * 0.15, Math.sin(a) * r * 0.5, 0.72], [Math.cos(a + 2.4) * r * 0.45, -r * 0.25, Math.sin(a + 2.4) * r * 0.45, 0.66]];
+    clumps.forEach(([dx, dy, dz, k], j) => {
+      q.setFromEuler(e.set(rnd(), rnd() * 3, rnd()));
+      crown.setMatrixAt(i * 3 + j, m4.compose(v.set(x + dx, cy + dy, z + dz), q, sc.set(r * k, r * k * 0.82, r * k)));
+      crown.setColorAt(i * 3 + j, col.set(palette[(i + j) % palette.length]).offsetHSL(0, 0, (rnd() - 0.5) * 0.05));
+    });
+    trunk.setMatrixAt(i, m4.compose(v.set(x, y0, z), q.identity(), sc.set(1, Math.max(1, h - r * 1.2), 1)));
+  });
+  crown.castShadow = trunk.castShadow = true; G.add(crown, trunk);
+}
+function cypressGeo(x, z, h, r, y0 = 0) {   // slim flame: widest a third of the way up, pointed top
+  const pts = [];
+  for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector2(r * Math.pow(Math.sin(PI * Math.min(1, t * 1.25 + 0.08)), 0.8) * (1 - t * 0.55) + 0.001, t * h)); }
+  return new THREE.LatheGeometry(pts, 9).translate(x, y0, z);
 }
 function venueBlock(group, { x, z, w, d, h, roofH, rot = 0, facade, side, roofMat }) {
   const b = new THREE.Group(); b.position.set(x, 0, z); b.rotation.y = rot;
@@ -3942,16 +4052,9 @@ const VENUES = {
         if (!blocked(pt)) trees.push([pt[0], pt[1], 3.2 + rnd() * 2.2, 7 + rnd() * 5]);
       }
       for (const [px, py, r] of [[390, 390, 9], [565, 440, 9.5], [60, 850, 3]]) { const [x, z] = P([px, py]); trees.push([x, z, r, r + 6]); }
-      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#3d5a2c', roughness: 1, flatShading: true }), trees.length);
-      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-      trees.forEach(([x, z, r, h], i) => {
-        canopy.setMatrixAt(i, m4.compose(v.set(x, h - r * 0.6, z), q, sc.set(r, r * 0.85, r)));
-        trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
-      });
-      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      plantTrees(G, trees);
       const cyp = [];
-      for (const [px, py] of [[590, 770], [602, 800], [614, 832], [262, 700], [252, 724]]) { const [x, z] = P([px, py]); cyp.push(new THREE.ConeGeometry(1.1, 12, 8).translate(x, 6.6, z), new THREE.SphereGeometry(1.1, 8, 6).translate(x, 0.8, z)); }
+      for (const [px, py] of [[590, 770], [602, 800], [614, 832], [262, 700], [252, 724]]) { const [x, z] = P([px, py]); cyp.push(cypressGeo(x, z, 13, 1.2)); }
       const cm = new THREE.Mesh(mergeLocal(cyp), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
       G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
     },
@@ -4025,8 +4128,8 @@ const VENUES = {
       for (let i = 0; i < 26; i++) { const sx = i % 2 ? 1 : -1, r = 0.5 + rb() * 0.4; hedges.push(new THREE.SphereGeometry(r, 10, 8).translate(sx * (13.6 + rb() * 1.6), r, 11 + rb() * 34)); }
       G.add(new THREE.Mesh(mergeLocal(hedges), hedge));
       const cyp = [];
-      for (const sx of [-1, 1]) for (let z = 12; z <= 44; z += 3.2) cyp.push(new THREE.ConeGeometry(0.9, 11, 8).translate(sx * 15.6, 6, z), new THREE.SphereGeometry(0.9, 8, 6).translate(sx * 15.6, 0.6, z));
-      for (let x = -9; x <= 9; x += 3) cyp.push(new THREE.ConeGeometry(0.9, 10, 8).translate(x, 5.5, 47.6));
+      for (const sx of [-1, 1]) for (let z = 12; z <= 44; z += 3.2) cyp.push(cypressGeo(sx * 15.6, z, 11.5, 1));
+      for (let x = -9; x <= 9; x += 3) cyp.push(cypressGeo(x, 47.6, 10.5, 1));
       const cm = new THREE.Mesh(mergeLocal(cyp), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
       const trees = [];
       for (const sx of [-1, 1]) for (const z of [-16, -8.5, 8.5, 16]) trees.push([z, sx * 4.75, 2.8, 9.5]);
@@ -4035,14 +4138,7 @@ const VENUES = {
         const px = x + (rnd() - 0.5) * 5, pz = z + (rnd() - 0.5) * 5;
         if (!inDomain(px, pz)) trees.push([px, pz, 3 + rnd() * 2.2, 8 + rnd() * 6]);
       }
-      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#4a6530', roughness: 1, flatShading: true }), trees.length);
-      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-      trees.forEach(([x, z, r, h], i) => {
-        canopy.setMatrixAt(i, m4.compose(v.set(x, h - r * 0.6, z), q, sc.set(r, r * 0.75, r)));
-        trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
-      });
-      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      plantTrees(G, trees);
       G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
     },
   },
@@ -4159,24 +4255,18 @@ const VENUES = {
         const pt = P([px + (rnd() - 0.5) * 26, py + (rnd() - 0.5) * 26]);
         if (!clear.some((p) => inside(pt, p)) && rnd() > 0.25) trees.push([pt[0], pt[1], 2.6 + rnd() * 1.8, 7 + rnd() * 4]);
       }
+      const olives = [];   // olive trees round the mas
       for (const [px, py, r, h] of [[710, 600, 3.6, 9], [780, 640, 3.2, 8], [805, 700, 2.8, 7], [400, 840, 3, 7], [930, 560, 2.8, 7], [470, 610, 2.2, 5.5], [330, 760, 2.5, 6], [860, 860, 2.5, 6]]) {
-        const [x, z] = P([px, py]); trees.push([x, z, r, h]); }
+        const [x, z] = P([px, py]); olives.push([x, z, r * 0.85, h * 0.75]); }
       along([[70, 1000], [430, 965]], 17, ([px, py]) => cyp.push(P([px, py])));
       along([[1000, 600], [1330, 540]], 30, ([px, py]) => cyp.push(P([px, py])));
       along([[990, 885], [1380, 835]], 30, ([px, py]) => cyp.push(P([px, py])));
       along([[860, 200], [950, 420]], 26, ([px, py]) => cyp.push(P([px, py])));
       for (let k = trees.length - 1; k >= 0; k--) if (Math.hypot(trees[k][0] - pX, trees[k][1] - pZ) < 20) trees.splice(k, 1);   // the pool stays open
-      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#5d7a3c', roughness: 1, flatShading: true }), trees.length);
-      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.32, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-      trees.forEach(([x, z, r, h], i) => {
-        const y0 = lift(x, z);
-        canopy.setMatrixAt(i, m4.compose(v.set(x, y0 + h - r * 0.6, z), q, sc.set(r, r * 0.8, r)));
-        trunk.setMatrixAt(i, m4.compose(v.set(x, y0, z), q, sc.set(1, h - r, 1)));
-      });
-      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      plantTrees(G, trees, FOREST, lift);
+      plantTrees(G, olives, OLIVE, lift);
       const cg = [];
-      for (const [x, z] of cyp) { const y0 = lift(x, z); cg.push(new THREE.ConeGeometry(0.75, 9, 8).translate(x, y0 + 5, z), new THREE.SphereGeometry(0.75, 8, 6).translate(x, y0 + 0.6, z)); }
+      for (const [x, z] of cyp) { const y0 = lift(x, z); cg.push(cypressGeo(x, z, 9.5, 0.85, y0)); }
       const cm = new THREE.Mesh(mergeLocal(cg), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
       G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
     },
@@ -4206,9 +4296,10 @@ function buildRoom() {
   catcher.visible = type === 'aucun';
   meadow.visible = type !== 'aucun';
   meadow.material.color.set(night ? '#4b5640' : meadowColor());
-  if (VENUES[type]) VENUES[type].build(roomGroup);
+  if (VENUES[type]) { VENUES[type].build(roomGroup); texturize(roomGroup); }
   else if (type !== 'aucun') {
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), new THREE.MeshStandardMaterial({ color: FLOOR[type], roughness: 0.85 }));
+    if (type === 'jardin') { floor.material.map = GRASS_TEX; worldUV(floor.material, 1 / 6); }   // lawn in mown bands
     floor.position.y = -0.02; floor.receiveShadow = true;
     roomGroup.add(floor);
     const pts = [];
@@ -4232,7 +4323,7 @@ function buildRoom() {
   const s = Math.max(w, d) / 2 + 6;
   if (scene.fog) { scene.fog.near = Math.max(60, s * 2); scene.fog.far = Math.max(190, s * 5); }   // big venues stay clear of the haze
   Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, far: Math.max(80, s * 4) });
-  sun.position.set(...SUN_DIR).setLength(Math.max(19, s * 1.6));   // far enough above tall venues
+  sun.position.set(...T_().dir).setLength(Math.max(19, s * 1.6));   // far enough above tall venues
   sun.shadow.camera.updateProjectionMatrix();
   $('#roomType').value = type;
   setVal('#roomW', w); setVal('#roomD', d);
@@ -4333,6 +4424,7 @@ function addObject(kind, o = {}) {
   scene.add(g);
   objects.push(g);
   applySee(g);
+  applyGlow(g);
   return g;
 }
 
@@ -4631,14 +4723,23 @@ setSnap(true);
 $('#btnUndo').addEventListener('click', undo);
 $('#btnRedo').addEventListener('click', redo);
 // Evening view: sky goes dark, sun and sky light fade, so the string lights and bulbs carry the scene.
+// In the evening view, a stretch cloth hung with string lights glows warm, lit from beneath.
+function applyGlow(g) {
+  const o = g.userData.opts;
+  if (g.userData.kind !== 'stretch' || !((o.lights && o.lights !== 'aucune') || o.twinkle)) return;
+  g.userData.prim.emissive.set(night ? '#ffb066' : '#000000');
+  g.userData.prim.emissiveIntensity = night ? 0.1 : 0;
+}
 function toggleNight() {
   night = !night;
   $('#btnNight').setAttribute('aria-pressed', String(night));
-  sun.intensity = night ? 0.12 : DAY.sun;
-  hemi.intensity = night ? 0.07 : DAY.hemi;
+  sun.intensity = night ? 0.28 : T_().si;   // moonlight
+  hemi.intensity = night ? 0.2 : T_().hi;
+  if ($('#lkTime')) $('#lkTime').value = night ? 'nuit' : tod;
   setLook();
   scene.environment = night ? null : envTex;
   applyTheme();
+  objects.forEach(applyGlow);
 }
 $('#btnNight').addEventListener('click', toggleNight);
 
@@ -4648,7 +4749,7 @@ const LOOK_STORE = STORE + '.look';
 let look = { bulbs: 0.5, light: 1 };
 try {
   const s = JSON.parse(localStorage.getItem(LOOK_STORE));
-  if (s) look = { bulbs: Number.isFinite(+s.bulbs) ? +s.bulbs : 0.5, light: Number.isFinite(+s.light) ? +s.light : 1 };
+  if (s) look = { bulbs: Number.isFinite(+s.bulbs) ? +s.bulbs : 0.5, light: Number.isFinite(+s.light) ? +s.light : 1, time: TIMES[s.time] ? s.time : 'aprem' };
 } catch (e) {}
 const BULB_BASE = [[MAT.bulb, '#ffe0a3', 1.7], [MAT.globe, '#ffd38a', 1.9]];
 function applyLook() {
@@ -4669,7 +4770,19 @@ function toggleLookBar(open = $('#lookBar').hidden) {
   $('#btnLook').setAttribute('aria-expanded', String(open));
 }
 $('#btnLook').addEventListener('click', () => toggleLookBar());
+// Time of day, kept on this device with the lights settings.
+function setTime(t) {
+  if (t === 'nuit') { if (!night) toggleNight(); return; }
+  tod = TIMES[t] ? t : 'aprem'; look.time = tod;
+  if (night) toggleNight();
+  else { sun.intensity = T_().si; hemi.intensity = T_().hi; setLook(); applyTheme(); }
+  sun.position.set(...T_().dir).setLength(sun.position.length());
+  applyLook();
+}
+$('#lkTime').addEventListener('change', (e) => setTime(e.target.value));
 applyLook();
+if (look.time && look.time !== 'aprem') setTime(look.time);
+$('#lkTime').value = tod;
 
 function toggleSee() {
   seeAll = !seeAll;
@@ -4678,6 +4791,21 @@ function toggleSee() {
 }
 $('#btnSee').addEventListener('click', toggleSee);
 $('#btn3D').addEventListener('click', () => view(false));
+/* Guest view: standing at 1,70 m a few metres outside the main tent (or the set-up), looking in; each click walks a
+   quarter of the way round. */
+let guestStep = 0;
+function guestView() {
+  let pick = objects.filter((o) => o.visible && COVERS.includes(o.userData.kind));
+  if (!pick.length) pick = objects.filter((o) => o.visible);
+  const box = new THREE.Box3(), c = new THREE.Vector3(), size = new THREE.Vector3();
+  if (pick.length) { for (const o of pick) box.expandByObject(o); box.getCenter(c); box.getSize(size); } else size.set(10, 3, 10);
+  const a = PI / 4 + guestStep * PI / 2, d = Math.max(size.x, size.z) / 2 + 4;
+  guestStep = (guestStep + 1) % 4; glide = null; orbit.autoRotate = false;
+  orbit.target.set(c.x, 1.5, c.z);
+  camera.position.set(c.x + Math.cos(a) * d, 1.7, c.z + Math.sin(a) * d);
+  $('#vpTag').textContent = 'Vue invité · 1,70 m';
+}
+$('#btnGuest').addEventListener('click', guestView);
 $('#btnTop').addEventListener('click', () => view(true));
 
 let armTimer = null;
@@ -5146,6 +5274,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'e') setMode('rotate');
   else if (k === 'r') setMode('scale');
   else if (k === 't') view(true);
+  else if (k === 'g') guestView();
   else if (k === 'v') toggleSee();
   else if (k === 'n') toggleNight();
   else if (k === 'l') toggleLock(selected);
@@ -5327,10 +5456,14 @@ async function offer(filename, data, okMsg) {
 $('#btnPng').addEventListener('click', () => {
   const tcVis = tc.visible, sbVis = selBox.visible;
   tc.visible = false; selBox.visible = false;
+  // HD photo: render the same view at about 3 840 px wide, then back to the screen size
+  const pr = renderer.getPixelRatio(), hd = Math.min(4, Math.max(pr, 3840 / Math.max(1, vpEl.clientWidth)));
+  renderer.setPixelRatio(hd); composer.setPixelRatio(hd); resize();
   composer.render();
   renderer.domElement.toBlob((blob) => {
+    renderer.setPixelRatio(pr); composer.setPixelRatio(pr); resize();
     tc.visible = tcVis; selBox.visible = sbVis;
-    if (blob) offer(`${slug()}.png`, blob, 'Image du plan téléchargée');
+    if (blob) offer(`${slug()}.png`, blob, 'Photo HD du plan téléchargée');
   }, 'image/png');
 });
 
