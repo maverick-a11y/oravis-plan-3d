@@ -782,6 +782,7 @@ MAT.concrete = fixed(new THREE.MeshStandardMaterial({ color: '#9b9a95', roughnes
 MAT.water = fixed(new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.1, metalness: 0.1 }));
 MAT.deck = fixed(new THREE.MeshStandardMaterial({ color: '#9c7a5a', roughness: 0.8 }));
 MAT.lounger = fixed(new THREE.MeshStandardMaterial({ color: '#5f5c58', roughness: 0.7 }));
+MAT.crystal = fixed(new THREE.MeshStandardMaterial({ color: '#e4f2f7', transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
 MAT.whiteCloth = fixed(new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.8 }));
 
 /* Guy-line anchors. Each guy ends on a stake driven into the ground or, where the ground can't be staked, on a concrete
@@ -856,14 +857,16 @@ const STRETCH = {
   '21x10.5': { name: '10,5 × 21 m', L: 21, W: 10.5, sx: 4.2, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-5, 0], [0, 0], [5, 0]] },
   '21x15': { name: '21 × 15 m', L: 21, W: 15, sx: 4.2, sz: 3, H: 3, peak: 4.5, R: 4.8, peaks: [[-5, -2.5], [0, -2.5], [5, -2.5], [-5, 2.5], [0, 2.5], [5, 2.5]] },
 };
-/* Stretch tent made to measure (size "mesure"): any length × width in 50 cm steps and the edge height chosen;
+/* Short sides: with closed corners only one pole, in the middle (see stretchT).
+   Stretch tent made to measure (size "mesure"): any length × width in 50 cm steps and the edge height chosen;
    perimeter poles evenly spaced at most 4,5 m apart, centre masts about every 7 m along the length (two rows from
    12 m wide), masts 1 m above the edge (1,5 m with two rows). */
 function stretchT(o) {
-  if (o.size !== 'mesure') return STRETCH[o.size] || STRETCH['15x10.5'];
+  // with the corners down to the ground the short sides keep a single pole, in the middle
+  if (o.size !== 'mesure') { const T = STRETCH[o.size] || STRETCH['15x10.5']; return o.corners === 'fermes' ? { ...T, sz: T.W / 2 } : T; }
   const L = +o.mL || 15, W = +o.mW || 10.5, H = +o.mH || 3, nx = Math.max(1, Math.round(L / 7)), nz = W > 12 ? 2 : 1, peaks = [];
   for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) peaks.push([-L / 2 + (L * (i + 0.5)) / nx, nz > 1 ? -W / 2 + (W * (k + 0.5)) / nz : 0]);
-  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
+  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: o.corners === 'fermes' ? W / 2 : W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
 }
 // Sides fixed to a wall of the venue: hem straight along the wall, no poles and no guys on that side.
 const WALL_SIDES = [['zm', 'wallB', 'arrière'], ['zp', 'wallF', 'avant'], ['xm', 'wallL', 'gauche'], ['xp', 'wallR', 'droit']];
@@ -1335,6 +1338,38 @@ function addJoint(g, prim, a, b, H) {
     rings.push(new THREE.TorusGeometry(0.03, 0.005, 5, 12).scale(1, 1.5, 1).rotateY(ang).translate(a[0] + d[0] * t, jointY(H, len, u) - 0.05, a[1] + d[1] * t));
   }
   g.add(new THREE.Mesh(mergeLocal(rings), MAT.metal));
+}
+/* Crystal walls (clear PVC), only with the corners down to the ground: on every free side, a vertical clear panel
+   from the ground up to the hem, following its scallops, with a 30 cm band of the tent's own fabric at the bottom.
+   At a closed corner the panel climbs from the corner stake to the first pole (on a short side that is the single
+   middle pole: a triangle); at a corner left open by a joint (two tents hooked together) it runs on to the corner
+   pole. Sides hooked to another tent or fixed to a wall get no panel. */
+const CRYSTAL_BAND = 0.3;
+const crystalLen = (o) => { const T = stretchT(o), j = jnOf(o); return Math.ceil(SIDES.filter((k) => !j[k]).reduce((t, k) => t + sideLen(T, k), 0)); };
+const SIDE_CORNERS = { zm: [[-1, -1], [1, -1]], zp: [[-1, 1], [1, 1]], xm: [[-1, -1], [-1, 1]], xp: [[1, -1], [1, 1]] };
+function addCrystal(g, prim, T, joined, at, closed) {
+  const inward = { xm: [1, 0], xp: [-1, 0], zm: [0, 1], zp: [0, -1] }, glass = [], band = [];
+  const isClosed = ([cx, cz]) => closed.some(([x, z]) => x === cx && z === cz);
+  const quad = (out, a, b, ya0, yb0, ya1, yb1) => out.push(a[0], ya0, a[1], b[0], yb0, b[1], b[0], yb1, b[1], a[0], ya0, a[1], b[0], yb1, b[1], a[0], ya1, a[1]);
+  for (const k of SIDES) {
+    if (joined[k]) continue;
+    const len = sideLen(T, k), sp = k[0] === 'x' ? T.sz : T.sx, [c0, c1] = SIDE_CORNERS[k].map(isClosed);
+    const v0 = c0 ? sp : 0, v1 = c1 ? len - sp : len, ss = [];
+    for (let v = v0; v < v1 - 1e-6; v += 0.25) ss.push(v);
+    ss.push(v1);
+    const hem = (v) => { const h = hemAt(T, k, v, joined), [x, z] = at(k, v); return [x + inward[k][0] * h.w, z + inward[k][1] * h.w, h.y - 0.02]; };
+    const top = [...(c0 ? [[...at(k, 0), 0]] : []), ...ss.map(hem), ...(c1 ? [[...at(k, len), 0]] : [])];
+    for (let i = 0; i < top.length - 1; i++) {
+      const [a, b] = [top[i], top[i + 1]], ba = Math.min(CRYSTAL_BAND, a[2]), bb = Math.min(CRYSTAL_BAND, b[2]);
+      quad(band, [a[0], a[1]], [b[0], b[1]], 0, 0, ba, bb);
+      quad(glass, [a[0], a[1]], [b[0], b[1]], ba, bb, a[2], b[2]);
+    }
+  }
+  for (const [pos, mat] of [[glass, MAT.crystal], [band, prim]]) {
+    if (!pos.length) continue;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); if (mat === MAT.crystal) { m.userData.noShadow = true; m.renderOrder = 2; } g.add(m);
+  }
 }
 function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = {}) {
   // The fabric is relaxed as a tensioned membrane in 3D: every inner point settles at the average of its
@@ -3001,6 +3036,7 @@ const KINDS = {
       wallL: { label: 'Côté gauche fixé à un mur', type: 'bool', def: false },
       wallR: { label: 'Côté droit fixé à un mur', type: 'bool', def: false },
       corners: { label: 'Angles', type: 'select', values: ['ouverts', 'fermes', 'un-cote'], names: { ouverts: 'Ouverts (sur poteaux)', fermes: 'Fermés (toile au sol)', 'un-cote': 'Fermés d\'un côté' }, def: 'ouverts' },
+      crystal: { when: (o) => o.corners === 'fermes', label: 'Parois cristal', type: 'bool', def: false },   // clear walls: only with the corners down to the ground
       jn: { hidden: true, def: '' },   // joined sides, set automatically when another tent is brought alongside
       guys: { label: 'Haubans', type: 'bool', def: true },
       ...ANCHOR_OPTS,
@@ -3020,7 +3056,8 @@ const KINDS = {
       const aTxt = guys.length ? `${guys.length} haubans : ${[ac.stakes && `${ac.stakes} piqueté${ac.stakes > 1 ? 's' : ''}`, ac.blocks && `${ac.blocks} sur bloc${ac.blocks > 1 ? 's' : ''} de lestage`].filter(Boolean).join(', ')}${o.ancrage === 'mixte' ? ' (cliquez sur le bout d\'un hauban pour le changer)' : ''}` : '';
       const T1 = stretchT(o), walls = WALL_SIDES.filter(([, key]) => o[key]);
       const wTxt = walls.length ? `Fixée au mur : ${walls.map(([k, , n]) => `côté ${n} (${fmtM(sideLen(T1, k))} m)`).join(', ')}, sans poteaux ni haubans de ce côté` : '';
-      return [o.size === 'mesure' ? `Sur mesure ${fmtM(T1.L)} × ${fmtM(T1.W)} m, bord à ${fmtM(T1.H)} m, ${T1.peaks.length > 1 ? `${T1.peaks.length} mâts centraux` : '1 mât central'} à ${fmtM(T1.peak)} m` : '', wTxt, jTxt, base, twTxt, aTxt].filter(Boolean).join(' · ');
+      const crTxt = o.crystal && o.corners === 'fermes' ? `Parois cristal : ${crystalLen(o)} m linéaires, sous l'ourlet, bande de toile de 30 cm en pied` : '';
+      return [crTxt, o.size === 'mesure' ? `Sur mesure ${fmtM(T1.L)} × ${fmtM(T1.W)} m, bord à ${fmtM(T1.H)} m, ${T1.peaks.length > 1 ? `${T1.peaks.length} mâts centraux` : '1 mât central'} à ${fmtM(T1.peak)} m` : '', wTxt, jTxt, base, twTxt, aTxt].filter(Boolean).join(' · ');
     },
     // guy lines: [top of the pole, ground point 3 m out], skipping closed corners and joined sides
     guysOf(o, T = stretchT(o), joined = jnOf(o)) {
@@ -3056,6 +3093,7 @@ const KINDS = {
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed, joined), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed, joined); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
       if (o.twinkle) { const tw = twinkleRun(T, o); if (tw) addTwinkle(g, tw); }
       const at = (k, v) => (k[0] === 'x' ? [k[1] === 'm' ? -L / 2 : L / 2, -Wd / 2 + v] : [-L / 2 + v, k[1] === 'm' ? -Wd / 2 : Wd / 2]);
+      if (o.crystal && o.corners === 'fermes') addCrystal(g, prim, T, joined, at, closed);
       for (const k of SIDES) if (joined[k + '*']) for (const [s0, s1] of joined[k + '@']) addJoint(g, prim, at(k, s0), at(k, s1), H);
       const batten = SIDES.filter((k) => joined[k + 'W']).map((k) => { const [a, b] = [at(k, 0), at(k, sideLen(T, k))]; return stick([a[0], H + 0.05, a[1]], [b[0], H + 0.05, b[1]], 0.04, 0.04, 6); });   // rail screwed to the wall
       if (batten.length) g.add(new THREE.Mesh(mergeLocal(batten), MAT.black));
@@ -3069,6 +3107,7 @@ const KINDS = {
         if (t.cable) q.cable_porteur_m = Math.ceil(t.cable); }
       const tw = o.twinkle ? twinkleRun(stretchT(o), o) : null;
       if (tw) { q.scintillant_m = tw.buy; q.scintillant_brins = tw.n; if (!q.cable_porteur_m) q.cable_porteur_m = Math.ceil(tw.bay); }
+      if (o.crystal && o.corners === 'fermes') q.paroi_cristal_m = crystalLen(o);
       return q;
     },
   },
@@ -3556,7 +3595,7 @@ const ITEM_DEFS = [
   ['table_serpentine', 'Table serpentine (segment 2,60 m de pointe à pointe × 91,5 cm)'], ['nappe_serpentine', 'Nappe serpentine'], ['table_rect', 'Table rectangulaire 1,80 m'], ['nappe_rect', 'Nappe rectangulaire'], ['table_pvc', 'Table PVC 200 × 90 cm'], ['nappe_pvc', 'Nappe pour table PVC 200 × 90 cm'],
   ['table_basse_bambou', 'Table basse bambou ronde Ø 1 m'], ['mange_debout', 'Mange-debout'], ['mange_debout_fer', 'Mange-debout fer forgé Ø 50 cm · h 110 cm'], ['tabouret_bistrot', 'Tabouret bistrot (assise tressée)'], ['tabouret_industriel', 'Tabouret industriel fer et bois'], ['housse', 'Housse mange-debout'], ['canape', 'Canapé lounge'], ['salon_bambou', 'Salon bambou (canapé + 2 fauteuils)'], ['canape_bambou', 'Canapé bambou 3 places'], ['fauteuil_bambou', 'Fauteuil bambou'], ['salon_teck', 'Salon teck (canapé + 2 fauteuils)'], ['canape_teck', 'Canapé teck 2 places'], ['fauteuil_teck', 'Fauteuil teck'],
   ['bar', 'Comptoir bar'], ['bar_zinc', 'Bar bois blanc plateau zinc 180 × 50 cm'], ['praticable_20', 'Module de scène 1 × 2 m · h 20 cm'], ['praticable_40', 'Module de scène 1 × 2 m · h 40 cm'], ['praticable_60', 'Module de scène 1 × 2 m · h 60 cm'], ['escalier_scene', 'Escalier de scène'], ['jupe_scene_m', 'Jupe de scène (mètres)'], ['piste_m2', 'Piste de danse (m²)'],
-  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['tente_stretch_mesure', 'Tente stretch sur mesure'], ['toile_tuilier', 'Toile stretch sur mesure Clos du Tuilier'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['bloc_lestage', 'Bloc de lestage béton 60 × 60 × 100 cm (hauban)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
+  ['guirlande_m', 'Guirlande lumineuse (mètres, marge 10 % incluse)'], ['guirlande_brins', 'Brins de guirlande'], ['cable_porteur_m', 'Câble porteur entre mâts (mètres)'], ['cable_ciel_m', 'Câble porteur ciel étoilé / cube (mètres)'], ['scintillant_m', 'Guirlande scintillante sous toile (mètres, marge 10 % incluse)'], ['scintillant_brins', 'Brins de guirlande scintillante'], ['guinguette_m', 'Guirlande guinguette (mètres, marge 10 % incluse)'], ['ampoules_guinguette', 'Ampoules guinguette (3 par mètre)'], ['depart_guinguette', 'Départs électriques guinguette'], ['poteau_guirlande', 'Poteau pour guirlande (3 m)'], ['mat_guirlande_4m', 'Mât / poteau central pour guirlande (4 m)'], ['piquet_hauban', 'Hauban + piquet (pieutage)'], ['tente_stretch_7.5x5.25', 'Tente stretch 7,5 × 5,25 m'], ['tente_stretch_10.5x7.5', 'Tente stretch 10,5 × 7,5 m'], ['tente_stretch_10.5x10.5', 'Tente stretch 10,5 × 10,5 m'], ['tente_stretch_15x10.5', 'Tente stretch 10,5 × 15 m'], ['tente_stretch_21x10.5', 'Tente stretch 10,5 × 21 m'], ['tente_stretch_21x15', 'Tente stretch 21 × 15 m'], ['tente_stretch_mesure', 'Tente stretch sur mesure'], ['paroi_cristal_m', 'Parois cristal (mètres linéaires)'], ['toile_tuilier', 'Toile stretch sur mesure Clos du Tuilier'], ['mousqueton_jumelage', 'Mousquetons de jumelage (1 par œillet, tous les 70 cm)'], ['gouttiere_m', 'Gouttière de jumelage, même toile, 50 cm (mètres)'], ['pagode_5x5', 'Pagode 5 × 5 m'], ['pagode_mur', 'Mur de pagode 5 m'], ['lest_pagode', 'Lest de pied de pagode'], ['bloc_lestage', 'Bloc de lestage béton 60 × 60 × 100 cm (hauban)'], ['voile_ombrage','Voile d\'ombrage 4 × 5 m (4 poteaux bambou)'], ['tente_5', 'Tente 5 × 5 m'], ['tente_10', 'Tente 5 × 10 m'], ['tente_15', 'Tente 5 × 15 m'], ['tente_20', 'Tente 5 × 20 m'],
   ['arche_octo', 'Arche octogonale Ø 2,30 m'], ['arche_ronde', 'Arche ronde Ø 2,30 m (noire)'], ['arche_teck', 'Arche teck 4 pieds 3 × 2 m'], ['arche_chene', 'Arche chêne 2 pieds 1,5 × 2,5 m'], ['enceinte', 'Enceinte sur pied'], ['boule_facettes_20', 'Boule à facettes Ø 20 cm (avec moteur)'], ['boule_facettes_30', 'Boule à facettes Ø 30 cm (avec moteur)'], ['boule_facettes_40', 'Boule à facettes Ø 40 cm (avec moteur)'], ['boule_facettes_50', 'Boule à facettes Ø 50 cm (avec moteur)'], ['sol_moquette', 'Moquette (m²)'], ['sol_tapis', 'Tapis d\'Orient (m²)'], ['sol_tapisUni', 'Tapis uni à bordure (m²)'], ['sol_rouge', 'Tapis d\'accueil rouge (m²)'], ['sol_jonc', 'Jonc de mer / sisal (m²)'], ['sol_gazon', 'Gazon synthétique (m²)'], ['sol_vinyle', 'Sol vinyle imitation bois (m²)'], ['sol_pvc', 'Sol PVC uni (m²)'], ['plancher_m2', 'Plancher événementiel (m²)'], ['plancher_bordure_m', 'Bordure de plancher (mètres)'], ['rampe_pmr', 'Rampe d\'accès PMR'],
   ['carrousel', 'Carrousel Lafayette 1893 (11 places, régisseur 6 h inclus)'], ['carrousel_nostalgie', 'Carrousel Nostalgie 1886 (13 personnes, régisseur 6 h inclus)'], ['eclairage', 'Projecteur d\'ambiance'],
 ];
