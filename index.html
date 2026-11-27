@@ -377,6 +377,13 @@ body.viewer .status, body.viewer .locked-wrap, body.viewer .vp-rot, body.viewer 
 body.viewer .dock { bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; max-width: calc(100% - 24px) !important; }
 body.viewer .vp-zoom { right: max(12px, env(safe-area-inset-right, 0px)) !important; }
 body.viewer .vp-tag { left: 16px; }
+/* client view: the items the client may add or leave out */
+.vw-choices { display: none; }
+body.viewer .vw-choices:not([hidden]) { display: grid; gap: 8px; position: absolute; z-index: 4; top: 112px; left: max(12px, env(safe-area-inset-left, 0px)); width: min(280px, calc(100% - 80px)); padding: 12px 14px; border-radius: 16px; background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+.vw-choices b { font-size: 13px; }
+.vw-choices p { margin: 0; font-size: 12px; color: var(--muted); }
+.vw-choices .row { grid-template-columns: minmax(0, 1fr) 34px; }
+.vw-choices .row > span:first-child { color: var(--fg); font-size: 13px; }
 .ai-box { width: min(620px, 100%); }
 .ai-input { display: flex; gap: 8px; align-items: stretch; }
 .ai-input textarea { flex: 1; min-width: 0; height: 96px; min-height: 64px; resize: vertical; font: 400 14px/1.45 var(--font-ui); color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
@@ -460,6 +467,7 @@ body.viewer .vp-tag { left: 16px; }
 
   <main class="viewport" id="viewport">
     <div class="vp-tag" id="vpTag">Perspective · grille 1 m</div>
+    <div class="vw-choices" id="vwChoices" hidden><b>Options à choisir</b><p>Ajoutez ou retirez ces éléments pour voir le rendu.</p><div id="vwChoiceList" style="display:grid;gap:8px"></div></div>
     <div class="locked-wrap" id="lockedWrap" hidden>
       <button class="btn" type="button" id="btnLocked" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Verrouillés</span><span class="n" id="lockedN"></span></button>
       <ul class="locked-list glass" id="lockedList" hidden></ul>
@@ -534,6 +542,7 @@ body.viewer .vp-tag { left: 16px; }
           <div class="row" id="lightRow" hidden><span>Intensité</span><input id="fInt" type="range" min="0" max="250" step="1"><output id="vInt"></output></div>
           <div class="row"><span>Encombrement</span><output class="wide" id="vSize"></output></div>
           <div class="row" id="infoRow" hidden><span>Éclairage</span><output class="wide" id="vInfo"></output></div>
+          <div class="row" title="Dans le lien client, le client peut ajouter ou retirer cet élément pour voir le rendu"><span>Au choix du client</span><input id="fChoice" type="checkbox" aria-label="Au choix du client dans le lien"></div>
         </div>
         <div class="sep"></div>
         <div id="vecs" style="display:grid;gap:12px"></div>
@@ -4210,6 +4219,7 @@ function addObject(kind, o = {}) {
   if (o.s) g.scale.fromArray(o.s);
   g.visible = o.visible ?? true;
   g.userData.locked = !!o.locked;
+  g.userData.choice = !!o.choice;   // the client may add or leave it out in the client view
   if (def.light) {
     const spot = opts.mode === 'spot';
     // plans saved before the spot projector existed stored a point-light intensity; a spot needs ~2.5× to light the same floor
@@ -4292,6 +4302,7 @@ function describe(g) {
   if (Object.keys(g.userData.opts).length) d.opts = { ...g.userData.opts };
   if (!g.visible) d.visible = false;
   if (g.userData.locked) d.locked = true;
+  if (g.userData.choice) d.choice = true;
   if (g.userData.light) d.intensity = g.userData.baseInt;
   if (g.userData.lamps.length && g.userData.lampScale !== 1) d.ls = g.userData.lampScale;
   return d;
@@ -4805,6 +4816,7 @@ function fillInspector() {
   $('#lampRow').hidden = !g.userData.lamps.length;
   if (g.userData.lamps.length) { setVal('#fLamp', Math.round(g.userData.lampScale * 100)); $('#vLamp').textContent = Math.round(g.userData.lampScale * 100) + ' %'; }
   if (g.userData.light) { setVal('#fInt', g.userData.baseInt); $('#vInt').textContent = fmt(g.userData.baseInt, 0); }
+  $('#fChoice').checked = !!g.userData.choice;
   const lk = !!g.userData.locked;
   $('#lockNote').hidden = !lk;
   $('#btnLock').innerHTML = lk ? 'Déverrouiller <kbd>L</kbd>' : 'Verrouiller <kbd>L</kbd>';
@@ -4863,6 +4875,12 @@ function focusSel() {
   camera.position.copy(c).add(off);
 }
 $('#btnLock').addEventListener('click', () => toggleLock(selected));
+$('#fChoice').addEventListener('change', (e) => {
+  if (!selected) return;
+  selected.userData.choice = e.target.checked;
+  commit();
+  toast(e.target.checked ? `« ${selected.name} » : le client pourra l'ajouter ou le retirer dans le lien` : `« ${selected.name} » est toujours affiché dans le lien`);
+});
 $('#btnDup').addEventListener('click', duplicate);
 $('#btnDel').addEventListener('click', del);
 $('#btnFocus').addEventListener('click', focusSel);
@@ -5645,6 +5663,15 @@ if (VIEW) {
     $('#vwName').textContent = data.event?.name || 'Votre événement';
     $('#vwSub').textContent = ['Plan 3D Oravis', data.event?.date ? new Date(data.event.date + 'T12:00').toLocaleDateString('fr-FR', { dateStyle: 'long' }) : ''].filter(Boolean).join(' · ');
     view(false); commit(); refresh();
+    // items the client may add or leave out: one switch each, starting as the plan was sent
+    const opts = objects.filter((o) => o.userData.choice);
+    $('#vwChoices').hidden = !opts.length;
+    $('#vwChoiceList').replaceChildren(...opts.map((o) => {
+      const row = document.createElement('label'), name = document.createElement('span'), sw = document.createElement('input');
+      row.className = 'row'; name.textContent = o.name; sw.type = 'checkbox'; sw.checked = o.visible;
+      sw.addEventListener('change', () => { o.visible = sw.checked; toast(`${o.name} : ${sw.checked ? 'ajouté' : 'retiré'}`); });
+      row.append(name, sw); return row;
+    }));
     toast('Glissez pour tourner, molette ou pincement pour zoomer');
   }).catch(() => toast('Ce lien de plan est incomplet : demandez un nouveau lien.'));
 } else {
