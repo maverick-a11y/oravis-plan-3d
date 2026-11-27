@@ -415,7 +415,7 @@ body.viewer .vp-tag { left: 16px; }
           <option value="salle">Salle</option>
           <option value="jardin">Jardin / extérieur</option>
           <option value="aucun">Sans sol</option>
-          <optgroup label="Lieux modélisés"><option value="martinay">Château Martinay</option></optgroup>
+          <optgroup label="Lieux modélisés"><option value="martinay">Château Martinay</option><option value="manville">Domaine de Manville</option></optgroup>
         </select>
         <input id="roomW" type="number" min="4" max="200" step="1" aria-label="Largeur du lieu en mètres">×
         <input id="roomD" type="number" min="4" max="200" step="1" aria-label="Profondeur du lieu en mètres">m
@@ -3689,6 +3689,92 @@ const VENUES = {
       G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
     },
   },
+  manville: {
+    name: 'Domaine de Manville',
+    where: "l'origine est au milieu du jardin-terrasse entre le mas (au nord, z négatif) et la piscine (au sud, z positif)",
+    // laid out from the aerial views, scaled on the 25 m pool: mas to the north, garden terrace with the fountain and
+    // pergolas, pool to the south, the gallery wing to the west and the long barn to the east, pine wood all round
+    w: 130, d: 130,
+    build(G) {
+      const mat = (c, r = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: r, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const slab = (w, d, x, z, m, y = 0.005) => { const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-PI / 2), m); s.position.set(x, y, z); s.receiveShadow = true; G.add(s); return s; };
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 130).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#5f6e3f', roughness: 1 }));
+      ground.position.y = -0.01; ground.receiveShadow = true; G.add(ground);
+      const paving = mat('#e6dcc8'), deckM = mat('#e3cfa6'), gravel = mat('#d9cfb9');
+      slab(40, 24, 0, -11, paving);              // garden terrace (restaurant)
+      slab(24, 36, 0, 19, deckM);                // pool deck
+      slab(6, 70, -36, 6, gravel);               // drive along the gallery wing
+      slab(8, 30, 0, 50, gravel);                // way in from the south
+      // pool 25 × 10 m with its stone surround and the curved headwall on the mas side
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(10, 25).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#1f7f90', roughness: 0.1, metalness: 0.1 }));
+      water.position.set(0, 0.03, 19); G.add(water);
+      const stoneM = new THREE.MeshStandardMaterial({ color: '#dcc79c', roughness: 0.9 }), parts = [];
+      for (const [w, d, x, z] of [[11.2, 0.6, 0, 6.2], [11.2, 0.6, 0, 31.8], [0.6, 26.2, -5.3, 19], [0.6, 26.2, 5.3, 19]]) parts.push(new THREE.BoxGeometry(w, 0.2, d).translate(x, 0.1, z));
+      parts.push(new THREE.BoxGeometry(5, 1.1, 0.6).translate(0, 0.55, 5.6), new THREE.CylinderGeometry(1.6, 1.6, 0.6, 24, 1, false, -PI / 2, PI).rotateX(PI / 2).scale(1.55, 0.45, 1).translate(0, 1.1, 5.6));
+      // round fountain basin Ø 5 m in the middle of the terrace
+      parts.push(new THREE.CylinderGeometry(2.5, 2.6, 0.6, 40, 1, true).translate(0, 0.3, -11), new THREE.TorusGeometry(2.55, 0.18, 6, 40).rotateX(PI / 2).translate(0, 0.6, -11), new THREE.CylinderGeometry(0.25, 0.4, 1.2, 12).translate(0, 0.6, -11));
+      G.add(new THREE.Mesh(mergeLocal(parts), stoneM));
+      { const w2 = new THREE.Mesh(new THREE.CircleGeometry(2.45, 40).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#7d9a7c', roughness: 0.2 })); w2.position.set(0, 0.45, -11); G.add(w2); }
+      // four iron pergolas with cane roofs around the fountain
+      const iron = [], cane = [];
+      for (const [x, z] of [[-9, -17], [9, -17], [-9, -5], [9, -5]]) {
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) iron.push(new THREE.BoxGeometry(0.12, 2.8, 0.12).translate(x + sx * 2.9, 1.4, z + sz * 2.2));
+        iron.push(new THREE.BoxGeometry(6, 0.12, 0.12).translate(x, 2.8, z - 2.2), new THREE.BoxGeometry(6, 0.12, 0.12).translate(x, 2.8, z + 2.2));
+        cane.push(new THREE.BoxGeometry(6.2, 0.06, 4.6).translate(x, 2.9, z));
+      }
+      G.add(new THREE.Mesh(mergeLocal(iron), new THREE.MeshStandardMaterial({ color: '#3b3530', roughness: 0.6, metalness: 0.4 })));
+      G.add(new THREE.Mesh(mergeLocal(cane), new THREE.MeshStandardMaterial({ color: '#b89a6a', roughness: 1 })));
+      // buildings: ochre mas with grey-blue shutters, gallery wing (west), long stone barn with its round window (east)
+      const roofMat = new THREE.MeshStandardMaterial({ color: '#c0704a', roughness: 0.9 });
+      const mas = venueFacade(46, 9, { stone: '#e9cf9c', shutter: '#8d9ca8', rows: [[1.0, 2.4], [5.0, 2.0]], bays: 10 });
+      venueBlock(G, { x: 0, z: -29, w: 46, d: 12, h: 9, roofH: 3.5, roofMat, facade: mas, side: venueFacade(12, 9, { stone: '#e9cf9c', shutter: '#8d9ca8', rows: [[5.0, 2.0]], bays: 2 }) });
+      venueBlock(G, { x: 31, z: -28, w: 16, d: 11, h: 7, roofH: 3, roofMat, facade: venueFacade(16, 7, { stone: '#e7d6b5', shutter: '#8d9ca8', rows: [[1, 2.2], [4.2, 1.8]], bays: 4 }) });
+      venueBlock(G, { x: 40, z: -42, w: 18, d: 10, h: 7, roofH: 3, roofMat });
+      const wingF = venueFacade(54, 7.5, { stone: '#dccdb2', shutter: '#6e5a44', rows: [[0.8, 2.4], [4.3, 2.4]], bays: 16 });
+      venueBlock(G, { x: -27, z: 3, w: 54, d: 12, h: 7.5, roofH: 3.5, rot: PI / 2, roofMat, facade: wingF });
+      venueBlock(G, { x: 28, z: 12, w: 58, d: 14, h: 7, roofH: 5, rot: PI / 2, roofMat });
+      { const ox = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshStandardMaterial({ color: '#2b2622' })); ox.position.set(28, 4.6, 41.03); G.add(ox); }
+      const wood = [];
+      for (let z = -23; z <= 29; z += 3.25) wood.push(new THREE.BoxGeometry(0.25, 7.4, 0.25).translate(-20.4, 3.7, z));
+      wood.push(new THREE.BoxGeometry(1.6, 0.2, 54).translate(-20.8, 3.6, 3), new THREE.BoxGeometry(0.08, 1, 54).translate(-20.1, 4.2, 3));
+      G.add(new THREE.Mesh(mergeLocal(wood), new THREE.MeshStandardMaterial({ color: '#6b5440', roughness: 0.8 })));
+      // square taupe parasols and dark loungers on both sides of the pool
+      const shade = [], poles = [], loung = [];
+      for (const sx of [-1, 1]) for (const z of [9.5, 16, 22.5, 29]) {
+        shade.push(new THREE.ConeGeometry(2.9, 0.5, 4, 1).rotateY(PI / 4).translate(sx * 8.6, 2.75, z));
+        poles.push(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8).translate(sx * 8.6, 1.4, z));
+        for (const dz of [-1.1, 1.1]) loung.push(new THREE.BoxGeometry(1.9, 0.35, 0.7).translate(sx * 7.2, 0.25, z + dz));
+      }
+      G.add(new THREE.Mesh(mergeLocal(shade), new THREE.MeshStandardMaterial({ color: '#c9bba6', roughness: 0.95, side: THREE.DoubleSide })));
+      G.add(new THREE.Mesh(mergeLocal(poles), new THREE.MeshStandardMaterial({ color: '#8a8a88', metalness: 0.5, roughness: 0.4 })));
+      G.add(new THREE.Mesh(mergeLocal(loung), new THREE.MeshStandardMaterial({ color: '#2d2f31', roughness: 0.7 })));
+      // clipped hedges round the pool deck and the terrace, boxwood balls, cypress rows, plane trees
+      const hedge = new THREE.MeshStandardMaterial({ color: '#3f6b2f', roughness: 0.95 }), hedges = [];
+      for (const [w, d, x, z] of [[24, 0.8, 0, 0.8], [0.8, 36, -12.4, 19], [0.8, 36, 12.4, 19], [9, 0.8, -7.5, 37], [9, 0.8, 7.5, 37]]) hedges.push(new THREE.BoxGeometry(w, 1.1, d).translate(x, 0.55, z));
+      const rb = seeded(31);
+      for (let i = 0; i < 26; i++) { const sx = i % 2 ? 1 : -1, r = 0.5 + rb() * 0.4; hedges.push(new THREE.SphereGeometry(r, 10, 8).translate(sx * (13.6 + rb() * 1.6), r, 2 + rb() * 34)); }
+      G.add(new THREE.Mesh(mergeLocal(hedges), hedge));
+      const cyp = [];
+      for (const sx of [-1, 1]) for (let z = 3; z <= 35; z += 3.2) cyp.push(new THREE.ConeGeometry(0.9, 11, 8).translate(sx * 15.6, 6, z), new THREE.SphereGeometry(0.9, 8, 6).translate(sx * 15.6, 0.6, z));
+      for (let x = -9; x <= 9; x += 3) cyp.push(new THREE.ConeGeometry(0.9, 10, 8).translate(x, 5.5, 38.6));
+      const cm = new THREE.Mesh(mergeLocal(cyp), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
+      const trees = [[13, -19, 7.5, 16], [-15, -8, 4, 10], [15, -4, 4, 10], [-15, -19, 3.5, 9]];
+      const rnd = seeded(53), inDomain = (x, z) => x > -42 && x < 48 && z > -50 && z < 44 || Math.abs(x) < 6 && z >= 44;
+      for (let x = -63; x < 65; x += 7) for (let z = -63; z < 65; z += 7) {
+        const px = x + (rnd() - 0.5) * 5, pz = z + (rnd() - 0.5) * 5;
+        if (!inDomain(px, pz)) trees.push([px, pz, 3 + rnd() * 2.2, 8 + rnd() * 6]);
+      }
+      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#4a6530', roughness: 1, flatShading: true }), trees.length);
+      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+      trees.forEach(([x, z, r, h], i) => {
+        canopy.setMatrixAt(i, m4.compose(v.set(x, h - r * 0.6, z), q, sc.set(r, r * 0.75, r)));
+        trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
+      });
+      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
+    },
+  },
 };
 
 function label(text) {
@@ -4883,7 +4969,7 @@ function aiCatalogue() {
 }
 function aiScene() {
   const v = VENUES[room.type];
-  const head = v ? `Lieu : ${v.name} (lieu modélisé, environ ${room.w} × ${room.d} m ; l'origine est au milieu de l'esplanade où l'on pose les tentes)` : room.type === 'aucun' ? 'Lieu : sans sol défini' : `Lieu : ${room.type === 'salle' ? 'salle' : 'jardin / extérieur'} de ${room.w} m (x) × ${room.d} m (z), centrée sur l'origine`;
+  const head = v ? `Lieu : ${v.name} (lieu modélisé, environ ${room.w} × ${room.d} m ; ${v.where || "l'origine est au milieu de l'esplanade où l'on pose les tentes"})` : room.type === 'aucun' ? 'Lieu : sans sol défini' : `Lieu : ${room.type === 'salle' ? 'salle' : 'jardin / extérieur'} de ${room.w} m (x) × ${room.d} m (z), centrée sur l'origine`;
   const items = objects.map((o) => { _b.setFromObject(o).getSize(_v); return `- « ${o.name} » (${o.userData.kind}) : centre x=${o.position.x.toFixed(1)} z=${o.position.z.toFixed(1)}, emprise ${_v.x.toFixed(1)} × ${_v.z.toFixed(1)} m`; });
   return head + '\nÉléments déjà sur le plan :\n' + (items.length ? items.join('\n') : '(aucun)');
 }
