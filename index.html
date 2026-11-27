@@ -808,7 +808,7 @@ const MAT_HIT = fixed(new THREE.MeshBasicMaterial({ visible: false }));
 function addGuys(g, o, guys, r) {   // guys: [[top [x, y, z], ground [x, z]], â€¦]
   if (!guys.length) return;
   const ropes = [], stakes = [], blocks = [];
-  for (const [top, p] of guys) {
+  for (const [top, p, hooks] of guys) {
     const b = onBlock(o, p);
     // crow's foot: one rope up from the anchor, splitting a third of the way from the top into three legs, to the pole
     // top and to the hem on either side of it
@@ -817,7 +817,7 @@ function addGuys(g, o, guys, r) {   // guys: [[top [x, y, z], ground [x, z]], â€
     // the legs run to the hem: along the side for a side pole, along both edges (back into the tent) for a corner pole
     const legs = Math.abs(ux) > 0.3 && Math.abs(uz) > 0.3 ? [[-Math.sign(ux), 0], [0, -Math.sign(uz)]] : [[-uz, ux], [uz, -ux]];
     ropes.push(stick(foot, sp, r, r, 5), stick(sp, top, r * 0.8, r * 0.8, 5));
-    for (const [ex, ez] of legs) ropes.push(stick(sp, [top[0] + ex * 0.9, top[1] - 0.22, top[2] + ez * 0.9], r * 0.8, r * 0.8, 5));
+    for (const [i, [ex, ez]] of legs.entries()) ropes.push(stick(sp, hooks ? hooks[i] : [top[0] + ex * 0.9, top[1] - 0.22, top[2] + ez * 0.9], r * 0.8, r * 0.8, 5));
     if (b) blocks.push(new THREE.BoxGeometry(LEST.l, LEST.h, LEST.w).rotateY(Math.atan2(p[0] - top[0], p[1] - top[2])).translate(p[0], LEST.h / 2, p[1]));
     else stakes.push(new THREE.CylinderGeometry(0.025, 0.012, 0.4, 6).translate(p[0], 0.08, p[1]));
     const hit = new THREE.Mesh(HIT_GEO, MAT_HIT); hit.position.set(p[0], 0, p[1]); hit.userData.anchor = anchorKey(p); g.add(hit);
@@ -940,10 +940,18 @@ function perimOf(T) {
 }
 /* Hem of side k at distance s from its start: straight over a joint, otherwise scalloped between its supports
    (the poles left on that side and the ends of the joints). Returns the height and how far it is pulled inward. */
+// distance along the hem from a pole to where each side leg of its guy is hooked on, and how far below the pole top
+// (pole top at 3 m, hooks at 2,50 m)
+const legOf = (sp) => Math.min(0.9, sp * 0.25), HOOK_DROP = 0.5;
 function hemAt(T, k, s, joined) {
   const len = sideLen(T, k), sp = k[0] === 'x' ? szOf(T, k) : T.sx, sag = 0.75, pull = 0.55;
   const iv = joined[k] ? joined[k + '@'] : null;
-  if (!iv) { const w = Math.sin(PI * ((s / sp) % 1)); return { y: T.H - sag * w, w: pull * w }; }
+  if (!iv) {   // the cloth peaks on each pole top, comes down to the two guy-leg hooks HOOK_DROP lower, and runs on
+    // between the hooks of neighbouring poles with only a slight sag
+    const d = legOf(sp), t = s - Math.floor(s / sp + 1e-9) * sp, u = Math.min(1, Math.max(0, (t - d) / (sp - 2 * d)));
+    const w = Math.sin(PI * u), drop = HOOK_DROP * Math.min(1, Math.min(t, sp - t) / d);
+    return { y: T.H - drop - 0.15 * w, w: 0.3 * w };
+  }
   for (const [s0, s1] of iv) if (s > s0 - 1e-6 && s < s1 + 1e-6) return { y: jointY(T.H, s1 - s0, (s - s0) / (s1 - s0)), w: 0 };
   const sup = iv.flat();
   for (let p = 0; p <= len + 1e-6; p += sp) if (!iv.some(([s0, s1]) => p > s0 - 1e-6 && p < s1 + 1e-6)) sup.push(p);
@@ -3116,7 +3124,11 @@ const KINDS = {
         const hits = jointHits(T, joined, x, z).map(([k]) => k);
         if (hits.includes('xm') || hits.includes('xp')) dx = 0;
         if (hits.includes('zm') || hits.includes('zp')) dz = 0;
-        if (dx || dz) out.push([[x, H, z], [x + dx * 3, z + dz * 3]]);
+        if (!dx && !dz) continue;
+        const lx = legOf(T.sx), lz = legOf(szOf(T, x < 0 ? 'xm' : 'xp'));
+        // side legs hooked on the hem: along the side for a side pole, along both edges for a corner pole
+        const hy = H - HOOK_DROP, legs = dx && dz ? [[x - dx * lx, hy, z], [x, hy, z - dz * lz]] : dz ? [[x - lx, hy, z], [x + lx, hy, z]] : [[x, hy, z - lz], [x, hy, z + lz]];
+        out.push([[x, H, z], [x + dx * 3, z + dz * 3], legs]);
       }
       return out;
     },
