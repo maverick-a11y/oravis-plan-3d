@@ -857,17 +857,18 @@ const STRETCH = {
   '21x10.5': { name: '10,5 × 21 m', L: 21, W: 10.5, sx: 4.2, sz: 3.5, H: 3, peak: 4, R: 5, peaks: [[-5, 0], [0, 0], [5, 0]] },
   '21x15': { name: '21 × 15 m', L: 21, W: 15, sx: 4.2, sz: 3, H: 3, peak: 4.5, R: 4.8, peaks: [[-5, -2.5], [0, -2.5], [5, -2.5], [-5, 2.5], [0, 2.5], [5, 2.5]] },
 };
-/* Short sides: with crystal walls on a short side only one pole, in the middle (see stretchT).
+/* Short sides: a short side with a crystal wall has only one pole, in its middle (T.szL / T.szR, see szOf).
    Stretch tent made to measure (size "mesure"): any length × width in 50 cm steps and the edge height chosen;
    perimeter poles evenly spaced at most 4,5 m apart, centre masts about every 7 m along the length (two rows from
    12 m wide), masts 1 m above the edge (1,5 m with two rows). */
 function stretchT(o) {
-  // crystal walls on a short side (corners down to the ground): the short sides keep a single pole, in the middle
-  const mid = o.corners === 'fermes' && (o.crL || o.crR);
-  if (o.size !== 'mesure') { const T = STRETCH[o.size] || STRETCH['15x10.5']; return mid ? { ...T, sz: T.W / 2 } : T; }
+  // a short side with a crystal wall (corners down to the ground) keeps a single pole, in its middle; the other short
+  // side keeps its usual poles
+  const side = (T) => (o.corners === 'fermes' && (o.crL || o.crR) ? { ...T, szL: o.crL ? T.W / 2 : T.sz, szR: o.crR ? T.W / 2 : T.sz } : T);
+  if (o.size !== 'mesure') return side(STRETCH[o.size] || STRETCH['15x10.5']);
   const L = +o.mL || 15, W = +o.mW || 10.5, H = +o.mH || 3, nx = Math.max(1, Math.round(L / 7)), nz = W > 12 ? 2 : 1, peaks = [];
   for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) peaks.push([-L / 2 + (L * (i + 0.5)) / nx, nz > 1 ? -W / 2 + (W * (k + 0.5)) / nz : 0]);
-  return { name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: mid ? W / 2 : W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks };
+  return side({ name: `${String(L).replace('.', ',')} × ${String(W).replace('.', ',')} m sur mesure`, L, W, sx: L / Math.ceil(L / 4.5), sz: W / Math.ceil(W / 4.5), H, peak: H + (nz > 1 ? 1.5 : 1), R: Math.min(L / nx, W / nz) / 2, peaks });
 }
 // Sides fixed to a wall of the venue: hem straight along the wall, no poles and no guys on that side.
 const WALL_SIDES = [['zm', 'wallB', 'arrière'], ['zp', 'wallF', 'avant'], ['xm', 'wallL', 'gauche'], ['xp', 'wallR', 'droit']];
@@ -915,16 +916,18 @@ function jointHits(T, joined, x, z) {
 }
 // A perimeter pole stays unless it is on a joint (the tent marked * keeps the two poles at the ends of its joint).
 const poleKept = (T, joined, x, z) => { const h = jointHits(T, joined, x, z); return !h.length || h.every(([k, end]) => end && joined[k + '*']); };
+// pole spacing along a side: the long sides use sx, each short side its own spacing (one middle pole with a crystal wall)
+const szOf = (T, k) => (k === 'xm' ? T.szL ?? T.sz : k === 'xp' ? T.szR ?? T.sz : T.sz);
 function perimOf(T) {
-  const { L, W, sx, sz } = T, p = [];
+  const { L, W, sx } = T, p = [];
   for (let x = -L / 2; x <= L / 2 + 1e-6; x += sx) p.push([x, -W / 2], [x, W / 2]);
-  for (let z = -W / 2 + sz; z < W / 2 - 1e-6; z += sz) p.push([-L / 2, z], [L / 2, z]);
+  for (const [x, k] of [[-L / 2, 'xm'], [L / 2, 'xp']]) { const s = szOf(T, k); for (let z = -W / 2 + s; z < W / 2 - 1e-6; z += s) p.push([x, z]); }
   return p;
 }
 /* Hem of side k at distance s from its start: straight over a joint, otherwise scalloped between its supports
    (the poles left on that side and the ends of the joints). Returns the height and how far it is pulled inward. */
 function hemAt(T, k, s, joined) {
-  const len = sideLen(T, k), sp = k[0] === 'x' ? T.sz : T.sx, sag = 0.75, pull = 0.55;
+  const len = sideLen(T, k), sp = k[0] === 'x' ? szOf(T, k) : T.sx, sag = 0.75, pull = 0.55;
   const iv = joined[k] ? joined[k + '@'] : null;
   if (!iv) { const w = Math.sin(PI * ((s / sp) % 1)); return { y: T.H - sag * w, w: pull * w }; }
   for (const [s0, s1] of iv) if (s > s0 - 1e-6 && s < s1 + 1e-6) return { y: jointY(T.H, s1 - s0, (s - s0) / (s1 - s0)), w: 0 };
@@ -1022,13 +1025,13 @@ const SIDE_KEYS = ['zm', 'xp', 'zp', 'xm'];   // order of the edges walked in st
 function stretchStrands(T, mode = 'fine', closed = [], joined = {}) {
   const { L, W, sx, sz, H, peak, peaks } = T, step = 0.7, sag = 0.75, pull = 0.55, y0 = H - 0.15, ym = Math.min(peak - 0.6, H + 0.05);   // cable just under the fabric between masts
   const edges = [                                   // [start, direction, length, pole spacing, inward normal]
-    [[-L / 2, -W / 2], [1, 0], L, sx, [0, 1]], [[L / 2, -W / 2], [0, 1], W, sz, [-1, 0]],
-    [[L / 2, W / 2], [-1, 0], L, sx, [0, -1]], [[-L / 2, W / 2], [0, -1], W, sz, [1, 0]],
+    [[-L / 2, -W / 2], [1, 0], L, sx, [0, 1]], [[L / 2, -W / 2], [0, 1], W, szOf(T, 'xp'), [-1, 0]],
+    [[L / 2, W / 2], [-1, 0], L, sx, [0, -1]], [[-L / 2, W / 2], [0, -1], W, szOf(T, 'xm'), [1, 0]],
   ];
   const per = 2 * (L + W), anchors = [], gg = mode === 'guinguette';
   const inClosedBay = (bx, bz) => closed.some(([cx, cz]) => {
     const ex = cx * L / 2, ez = cz * W / 2;
-    return (Math.abs(bz - ez) < 1e-6 && Math.abs(bx - ex) < sx - 1e-6) || (Math.abs(bx - ex) < 1e-6 && Math.abs(bz - ez) < sz - 1e-6);
+    return (Math.abs(bz - ez) < 1e-6 && Math.abs(bx - ex) < sx - 1e-6) || (Math.abs(bx - ex) < 1e-6 && Math.abs(bz - ez) < szOf(T, cx < 0 ? 'xm' : 'xp') - 1e-6);
   });
   for (let u = 0; u < per - 1e-6; u += gg ? 0 : step) {
     if (gg) break;
@@ -1041,7 +1044,7 @@ function stretchStrands(T, mode = 'fine', closed = [], joined = {}) {
   }
   if (gg) {
     for (let x = -L / 2; x <= L / 2 + 1e-6; x += sx) anchors.push([x, y0, -W / 2], [x, y0, W / 2]);
-    for (let z = -W / 2 + sz; z < W / 2 - 1e-6; z += sz) anchors.push([-L / 2, y0, z], [L / 2, y0, z]);
+    for (const [x, k] of [[-L / 2, 'xm'], [L / 2, 'xp']]) { const s2 = szOf(T, k); for (let z = -W / 2 + s2; z < W / 2 - 1e-6; z += s2) anchors.push([x, y0, z]); }
     for (let i = anchors.length - 1; i >= 0; i--) if (inClosedBay(anchors[i][0], anchors[i][2])) anchors.splice(i, 1);
     for (const p of anchors) for (const k of SIDES) if (joined[k] && onSide(T, k, p[0], p[2])) p[1] = Math.min(p[1], hemAt(T, k, sideS(T, k, p[0], p[2]), joined).y - 0.15);
   }
@@ -1356,7 +1359,7 @@ function addCrystal(g, prim, T, joined, at, closed, sides) {
   const quad = (out, a, b, ya0, yb0, ya1, yb1) => out.push(a[0], ya0, a[1], b[0], yb0, b[1], b[0], yb1, b[1], a[0], ya0, a[1], b[0], yb1, b[1], a[0], ya1, a[1]);
   for (const k of sides) {
     if (joined[k]) continue;
-    const len = sideLen(T, k), sp = k[0] === 'x' ? T.sz : T.sx, [c0, c1] = SIDE_CORNERS[k].map(isClosed);
+    const len = sideLen(T, k), sp = k[0] === 'x' ? szOf(T, k) : T.sx, [c0, c1] = SIDE_CORNERS[k].map(isClosed);
     const v0 = c0 ? sp : 0, v1 = c1 ? len - sp : len, ss = [];
     for (let v = v0; v < v1 - 1e-6; v += 0.25) ss.push(v);
     ss.push(v1);
@@ -1374,7 +1377,7 @@ function addCrystal(g, prim, T, joined, at, closed, sides) {
     const m = new THREE.Mesh(geo, mat); if (mat === MAT.crystal) { m.userData.noShadow = true; m.renderOrder = 2; } g.add(m);
   }
 }
-function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = {}) {
+function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = {}, szL = sz, szR = sz) {
   // The fabric is relaxed as a tensioned membrane in 3D: every inner point settles at the average of its
   // neighbours, between fixed points (fabric edge on the poles, mast tops, ground anchors of closed corners).
   // Edges are scalloped: between two poles the hem dips and is pulled inward. At a closed corner the cloth
@@ -1390,7 +1393,7 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
     const onZ = j === 0 || j === NZ, onX = i === 0 || i === NX;
     if (onZ || onX) {
       fixedNode[k] = 1;
-      const TT = { L, W: Wd, sx, sz, H };
+      const TT = { L, W: Wd, sx, sz, szL, szR, H };
       if (onZ) { const h = hemAt(TT, j === 0 ? 'zm' : 'zp', X(i) + L / 2, joined); y = h.y; z += (j === 0 ? 1 : -1) * h.w; }
       else { const h = hemAt(TT, i === 0 ? 'xm' : 'xp', Z(j) + Wd / 2, joined); y = h.y; x += (i === 0 ? 1 : -1) * h.w; }
       // Closed corner: only the last bay changes. The hem stays on top of the neighbouring pole and runs
@@ -1400,7 +1403,7 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
         const ex = cx * L / 2, ez = cz * Wd / 2, ax = ex, az = ez;   // stake on the corner itself
         let P = null, t = 0, nIn = [0, 0];
         if (onZ && Math.abs(Z(j) - ez) < 1e-6 && Math.abs(X(i) - ex) < sx - 1e-6) { t = 1 - Math.abs(X(i) - ex) / sx; P = [ex - cx * sx, ez]; nIn = [0, -cz]; }
-        else if (onX && Math.abs(X(i) - ex) < 1e-6 && Math.abs(Z(j) - ez) < sz - 1e-6) { t = 1 - Math.abs(Z(j) - ez) / sz; P = [ex, ez - cz * sz]; nIn = [-cx, 0]; }
+        else if (onX && Math.abs(X(i) - ex) < 1e-6 && Math.abs(Z(j) - ez) < (cx < 0 ? szL : szR) - 1e-6) { const s2 = cx < 0 ? szL : szR; t = 1 - Math.abs(Z(j) - ez) / s2; P = [ex, ez - cz * s2]; nIn = [-cx, 0]; }
         if (!P) continue;
         const w = 0.7 * pull * Math.sin(PI * t);   // slightly concave hem, like a tensioned edge
         x = P[0] + (ax - P[0]) * t + nIn[0] * w;
@@ -1416,7 +1419,7 @@ function stretchGeo(L, Wd, sx, sz, H, peak, peaks, closed = [], R = 5, joined = 
   // pole tops and the roof behind them, so it slopes down evenly with no fold or ridge.
   for (const [cx, cz] of closed) {
     const ci = cx < 0 ? 0 : NX, cj = cz < 0 ? 0 : NZ, di = cx < 0 ? 1 : -1, dj = cz < 0 ? 1 : -1;
-    const nx = Math.max(2, Math.round(sx / (L / NX))), nz = Math.max(2, Math.round(sz / (Wd / NZ)));
+    const nx = Math.max(2, Math.round(sx / (L / NX))), nz = Math.max(2, Math.round((cx < 0 ? szL : szR) / (Wd / NZ)));
     const P = (s, t) => { const k = id(ci + di * s, cj + dj * t); return [px[k], py[k], pz[k]]; };
     const C = P(0, 0), A = P(nx, 0), B = P(0, nz);
     const D = [X(ci + di * nx), H - 0.1, Z(cj + dj * nz)];
@@ -3087,7 +3090,7 @@ const KINDS = {
     stretchOne(g, prim, o, T, joined) {
       const { L, sx, sz, H, peaks } = T, Wd = T.W, PEAK = T.peak;
       const closed = closedFor(o, joined);
-      const { geo, hem } = stretchGeo(L, Wd, sx, sz, H, PEAK, peaks, closed, T.R, joined);
+      const { geo, hem } = stretchGeo(L, Wd, sx, sz, H, PEAK, peaks, closed, T.R, joined, szOf(T, 'xm'), szOf(T, 'xp'));
       g.add(new THREE.Mesh(geo, prim), new THREE.LineLoop(hem, MAT.hem));
       const near = (a, b) => Math.abs(a - b) < 1e-6;
       const wood = [];
