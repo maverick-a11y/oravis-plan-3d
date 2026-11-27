@@ -415,7 +415,7 @@ body.viewer .vp-tag { left: 16px; }
           <option value="salle">Salle</option>
           <option value="jardin">Jardin / extérieur</option>
           <option value="aucun">Sans sol</option>
-          <optgroup label="Lieux modélisés"><option value="martinay">Château Martinay</option><option value="manville">Domaine de Manville</option></optgroup>
+          <optgroup label="Lieux modélisés"><option value="martinay">Château Martinay</option><option value="manville">Domaine de Manville</option><option value="tuilier">Le Clos du Tuilier</option></optgroup>
         </select>
         <input id="roomW" type="number" min="4" max="200" step="1" aria-label="Largeur du lieu en mètres">×
         <input id="roomD" type="number" min="4" max="200" step="1" aria-label="Profondeur du lieu en mètres">m
@@ -3827,6 +3827,100 @@ const VENUES = {
         trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
       });
       canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
+    },
+  },
+  tuilier: {
+    name: 'Le Clos du Tuilier',
+    where: "l'origine est au milieu de la grande pelouse au nord du mas (la piscine est à l'ouest, le grand parking en gravier à l'est, la route au sud)",
+    // traced on the satellite view: 0,11 m per pixel (checked on the cars and the 10 × 4,4 m pool), origin in the middle
+    // of the big lawn (pixel 620, 530); north is -z
+    w: 170, d: 126,
+    build(G) {
+      const S = 0.11, P = ([px, py]) => [(px - 620) * S, (py - 530) * S];
+      const mat = (c, r = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: r, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const flat = (pts, m, y) => {
+        const sh = new THREE.Shape(pts.map(P).map(([a, b]) => new THREE.Vector2(a, -b)));
+        const f = new THREE.Mesh(new THREE.ShapeGeometry(sh).rotateX(-PI / 2), m); f.position.y = y; f.receiveShadow = true; G.add(f); return f;
+      };
+      const strip = (pts, w, m, y) => {   // a path of width w (m) along a polyline
+        const geos = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [ax, az] = P(pts[i]), [bx, bz] = P(pts[i + 1]), len = Math.hypot(bx - ax, bz - az);
+          geos.push(new THREE.PlaneGeometry(len + w, w).rotateX(-PI / 2).rotateY(-Math.atan2(bz - az, bx - ax)).translate((ax + bx) / 2, 0, (az + bz) / 2));
+        }
+        const f = new THREE.Mesh(mergeLocal(geos), m); f.position.y = y; f.receiveShadow = true; G.add(f);
+      };
+      // wheat fields all round, the property's rough grass, mown lawns, gravel
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(170, 126).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#cbb98d', roughness: 1 }));
+      ground.position.set((771 - 620) * S, -0.01, (571 - 530) * S); ground.receiveShadow = true; G.add(ground);
+      const SITE = [[60, 1070], [110, 900], [250, 600], [420, 430], [600, 300], [760, 180], [900, 90], [960, 40], [1290, 40], [1340, 200], [1420, 520], [1460, 860], [1460, 880], [60, 1075]];
+      flat(SITE, mat('#90a25c'), 0.01);
+      const lawnM = mat('#6f9c45'), gravel = mat('#d6c9ab'), tarmac = mat('#8d8a84');
+      const LAWN = [[450, 470], [560, 410], [640, 385], [700, 430], [790, 540], [800, 560], [700, 620], [560, 650], [470, 640], [440, 560]];
+      const LAWN_E = [[830, 600], [1080, 525], [1085, 560], [990, 605], [930, 650], [860, 660]];
+      const LAWN_N = [[950, 40], [1070, 40], [1100, 420], [1010, 450], [960, 250]];
+      const LAWN_W = [[240, 690], [300, 690], [370, 830], [420, 1000], [70, 1010], [140, 850]];
+      for (const p of [LAWN, LAWN_E, LAWN_N, LAWN_W]) flat(p, lawnM, 0.04);
+      const PARK = [[985, 620], [1335, 548], [1395, 835], [1060, 880]];
+      const PARK_N = [[1085, 465], [1390, 485], [1395, 545], [1100, 560], [1085, 520]];
+      const COURT = [[790, 770], [950, 765], [955, 920], [800, 950]];
+      const DECK = [[300, 665], [290, 630], [340, 560], [390, 540], [430, 560], [440, 600], [410, 680], [350, 690]];
+      for (const p of [PARK, PARK_N, COURT, DECK]) flat(p, gravel, 0.07);
+      strip([[470, 1040], [450, 1000], [420, 950], [390, 880], [370, 800], [340, 730], [290, 680]], 3.5, gravel, 0.08);   // drive up past the mas to the pool
+      strip([[440, 720], [650, 620], [750, 595], [800, 700], [840, 780]], 2.5, gravel, 0.08);                              // path along the north side of the mas
+      strip([[0, 1078], [700, 990], [1542, 878]], 5, tarmac, 0.09);                                                          // road to the south
+      strip([[1475, 880], [1500, 640], [1450, 420], [1390, 250], [1330, 110], [1300, 0]], 4.5, tarmac, 0.09);                // lane to the east
+      // pool 10 × 4,4 m with its stone coping, long side turned toward the north-east
+      const [pX, pZ] = P([370, 603]), pRot = 1.04;
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(10.2, 4.4).rotateX(-PI / 2).rotateY(pRot), new THREE.MeshStandardMaterial({ color: '#3aa6c6', roughness: 0.1, metalness: 0.1 }));
+      water.position.set(pX, 0.14, pZ); G.add(water);
+      const cope = [];
+      for (const [w, d, x, z] of [[11, 0.4, 0, -2.4], [11, 0.4, 0, 2.4], [0.4, 4.4, -5.3, 0], [0.4, 4.4, 5.3, 0]]) cope.push(new THREE.BoxGeometry(w, 0.18, d).translate(x, 0.09, z));
+      G.add(new THREE.Mesh(mergeLocal(cope).rotateY(pRot).translate(pX, 0, pZ), new THREE.MeshStandardMaterial({ color: '#e7ddc9', roughness: 0.9 })));
+      // the mas: old stone farmhouse in several blocks under weathered tile roofs, turned about 20°
+      const stone = '#a8957a', roofA = new THREE.MeshStandardMaterial({ color: '#8f6f58', roughness: 0.95 }), roofB = new THREE.MeshStandardMaterial({ color: '#a8735a', roughness: 0.95 });
+      const face = (w, h) => venueFacade(w, h, { stone, shutter: '#cfc8b8', rows: h > 6.5 ? [[1, 2.2], [4.2, 1.6]] : [[1, 2.2]], bays: Math.max(2, Math.round(w / 3.5)) });
+      for (const [px, py, w, d, h, roofH, rm] of [
+        [505, 835, 10, 12, 7, 3, roofB], [605, 755, 16.5, 7.7, 8, 2.6, roofA], [590, 695, 6, 5, 6, 2, roofB], [685, 700, 5.5, 5.5, 8.5, 2.2, roofA],
+        [740, 740, 6, 13, 7, 2.6, roofB], [635, 820, 18, 5.5, 6.5, 2, roofA], [580, 905, 21, 8.5, 6, 2.8, roofB], [905, 865, 5, 6, 3.5, 1.4, roofB],
+      ]) { const [x, z] = P([px, py]); venueBlock(G, { x, z, w, d, h, roofH, rot: 0.36, roofMat: rm, facade: face(w, h), side: face(d, h) }); }
+      // lavender field: rows running down the slope
+      { const A = P([690, 290]), B = P([830, 515]), D = P([860, 195]), rows = [], n = 14;
+        const len = Math.hypot(B[0] - A[0], B[1] - A[1]), ang = -Math.atan2(B[1] - A[1], B[0] - A[0]);
+        for (let i = 0; i < n; i++) {
+          const t = (i + 0.5) / n, sx = A[0] + (D[0] - A[0]) * t, sz = A[1] + (D[1] - A[1]) * t;
+          rows.push(new THREE.BoxGeometry(len, 0.55, 0.8).rotateY(ang).translate(sx + (B[0] - A[0]) / 2, 0.28, sz + (B[1] - A[1]) / 2));
+        }
+        G.add(new THREE.Mesh(mergeLocal(rows), new THREE.MeshStandardMaterial({ color: '#8e88a6', roughness: 1 }))); }
+      // trees: the belt along the field edge, the wood to the east, specimen trees by the mas; cypress rows
+      const clear = [LAWN, LAWN_E, LAWN_W, PARK, PARK_N, COURT, DECK].map((p) => p.map(P));
+      const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > pt[1]) !== (zj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - zi)) / (zj - zi) + xi) c = !c; } return c; };
+      const rnd = seeded(91), trees = [], cyp = [];
+      const along = (pts, step, fn) => { for (let i = 0; i < pts.length - 1; i++) { const [a, b] = [pts[i], pts[i + 1]], n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)); for (let k = 0; k < n; k++) fn([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); } };
+      along([[70, 990], [130, 850], [240, 620], [380, 470], [560, 330], [700, 240], [820, 150], [900, 90]], 34, ([px, py]) => {
+        const [x, z] = P([px + (rnd() - 0.5) * 20, py + (rnd() - 0.5) * 20]); trees.push([x, z, 2.8 + rnd() * 1.6, 7 + rnd() * 4]); });
+      for (let px = 1130; px < 1380; px += 40) for (let py = 60; py < 460; py += 40) {
+        const pt = P([px + (rnd() - 0.5) * 26, py + (rnd() - 0.5) * 26]);
+        if (!clear.some((p) => inside(pt, p)) && rnd() > 0.25) trees.push([pt[0], pt[1], 2.6 + rnd() * 1.8, 7 + rnd() * 4]);
+      }
+      for (const [px, py, r, h] of [[710, 600, 3.6, 9], [780, 640, 3.2, 8], [805, 700, 2.8, 7], [400, 840, 3, 7], [930, 560, 2.8, 7], [470, 610, 2.2, 5.5], [330, 760, 2.5, 6], [860, 860, 2.5, 6]]) {
+        const [x, z] = P([px, py]); trees.push([x, z, r, h]); }
+      along([[70, 1000], [430, 965]], 17, ([px, py]) => cyp.push(P([px, py])));
+      along([[1000, 600], [1330, 540]], 30, ([px, py]) => cyp.push(P([px, py])));
+      along([[990, 885], [1380, 835]], 30, ([px, py]) => cyp.push(P([px, py])));
+      along([[860, 200], [950, 420]], 26, ([px, py]) => cyp.push(P([px, py])));
+      const canopy = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#5d7a3c', roughness: 1, flatShading: true }), trees.length);
+      const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.32, 1, 6).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#5b4632', roughness: 1 }), trees.length);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+      trees.forEach(([x, z, r, h], i) => {
+        canopy.setMatrixAt(i, m4.compose(v.set(x, h - r * 0.6, z), q, sc.set(r, r * 0.8, r)));
+        trunk.setMatrixAt(i, m4.compose(v.set(x, 0, z), q, sc.set(1, h - r, 1)));
+      });
+      canopy.castShadow = trunk.castShadow = true; G.add(canopy, trunk);
+      const cg = [];
+      for (const [x, z] of cyp) cg.push(new THREE.ConeGeometry(0.75, 9, 8).translate(x, 5, z), new THREE.SphereGeometry(0.75, 8, 6).translate(x, 0.6, z));
+      const cm = new THREE.Mesh(mergeLocal(cg), new THREE.MeshStandardMaterial({ color: '#2f4a26', roughness: 1 })); cm.castShadow = true; G.add(cm);
       G.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && o.receiveShadow !== true) { o.castShadow = true; o.receiveShadow = true; } });
     },
   },
