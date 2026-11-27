@@ -810,7 +810,14 @@ function addGuys(g, o, guys, r) {   // guys: [[top [x, y, z], ground [x, z]], �
   const ropes = [], stakes = [], blocks = [];
   for (const [top, p] of guys) {
     const b = onBlock(o, p);
-    ropes.push(stick(top, [p[0], b ? LEST.h : 0.05, p[1]], r, r, 5));
+    // crow's foot: one rope up from the anchor, splitting a third of the way from the top into three legs, to the pole
+    // top and to the hem on either side of it
+    const foot = [p[0], b ? LEST.h : 0.05, p[1]], k = 0.3, sp = [top[0] + (foot[0] - top[0]) * k, top[1] + (foot[1] - top[1]) * k, top[2] + (foot[2] - top[2]) * k];
+    const hl = Math.hypot(foot[0] - top[0], foot[2] - top[2]) || 1, ux = (foot[0] - top[0]) / hl, uz = (foot[2] - top[2]) / hl;
+    // the legs run to the hem: along the side for a side pole, along both edges (back into the tent) for a corner pole
+    const legs = Math.abs(ux) > 0.3 && Math.abs(uz) > 0.3 ? [[-Math.sign(ux), 0], [0, -Math.sign(uz)]] : [[-uz, ux], [uz, -ux]];
+    ropes.push(stick(foot, sp, r, r, 5), stick(sp, top, r * 0.8, r * 0.8, 5));
+    for (const [ex, ez] of legs) ropes.push(stick(sp, [top[0] + ex * 0.9, top[1] - 0.22, top[2] + ez * 0.9], r * 0.8, r * 0.8, 5));
     if (b) blocks.push(new THREE.BoxGeometry(LEST.l, LEST.h, LEST.w).rotateY(Math.atan2(p[0] - top[0], p[1] - top[2])).translate(p[0], LEST.h / 2, p[1]));
     else stakes.push(new THREE.CylinderGeometry(0.025, 0.012, 0.4, 6).translate(p[0], 0.08, p[1]));
     const hit = new THREE.Mesh(HIT_GEO, MAT_HIT); hit.position.set(p[0], 0, p[1]); hit.userData.anchor = anchorKey(p); g.add(hit);
@@ -3109,7 +3116,7 @@ const KINDS = {
         const hits = jointHits(T, joined, x, z).map(([k]) => k);
         if (hits.includes('xm') || hits.includes('xp')) dx = 0;
         if (hits.includes('zm') || hits.includes('zp')) dz = 0;
-        if (dx || dz) out.push([[x, H + 0.1, z], [x + dx * 3, z + dz * 3]]);
+        if (dx || dz) out.push([[x, H, z], [x + dx * 3, z + dz * 3]]);
       }
       return out;
     },
@@ -3125,9 +3132,9 @@ const KINDS = {
       for (const [x, z] of perimOf(T)) {
         if (closed.some(([cx, cz]) => near(x, cx * L / 2) && near(z, cz * Wd / 2))) continue;
         // On a joint: no perimeter poles; the poles at its two ends are drawn once, by the tent marked *.
-        if (poleKept(T, joined, x, z)) wood.push(bambooPole(x, z, H + 0.25));
+        if (poleKept(T, joined, x, z)) wood.push(bambooPole(x, z, H - 0.02));   // the cloth covers the pole top
       }
-      for (const [x, z] of peaks) wood.push(bambooPole(x, z, PEAK + 0.3));
+      for (const [x, z] of peaks) wood.push(bambooPole(x, z, PEAK - 0.02));
       g.add(new THREE.Mesh(mergeLocal(wood), MAT.bamboo));
       addGuys(g, o, KINDS.stretch.guysOf(o, T, joined), 0.008);
       if (o.lights && o.lights !== 'aucune') { const gg = o.lights === 'guinguette'; addStringLights(g, stretchStrands(T, gg ? 'guinguette' : 'fine', closed, joined), peaks.map(([x, z]) => [x, PEAK - 0.6, z]), gg ? 'guinguette' : 'fine'); if (gg) { const rt = stretchRoute(T, closed, joined); if (rt.links.length) addStringLights(g, { strands: linkStrands(rt), cables: [] }, [], 'guinguette'); addFeed(g, rt.start, H - 0.15); } }
@@ -4601,8 +4608,23 @@ function autoJoin(moved = null) {
   }
   if (snapped) toast(`Tentes jumelées : ${carabOf(snapped.len)} mousquetons sur ${fmtM(Math.round(snapped.len * 100) / 100)} m (1 tous les 70 cm), gouttière posée`);
 }
+/* A projector hung under a tent never pokes through the cloth: if its top reaches the fabric above it, it is lowered
+   to hang 10 cm under it. Projectors set above a cloth, or away from any tent, keep their height. */
+const _hang = new THREE.Raycaster(), _down = new THREE.Vector3(0, -1, 0), _from = new THREE.Vector3();
+function hangLights() {
+  const cloths = objects.filter((o) => o.visible && COVERS.includes(o.userData.kind));
+  if (!cloths.length) return;
+  for (const g of objects) {
+    if (g.userData.kind !== 'light') continue;
+    const top = g.position.y + (g.userData.opts.mode === 'wash' ? 0.1 : 0.3), bottom = g.position.y - 0.2;
+    _hang.set(_from.set(g.position.x, 60, g.position.z), _down);
+    const hit = _hang.intersectObjects(cloths, true).find((h) => h.object.isMesh && h.object.material !== MAT.crystal);
+    if (hit && bottom < hit.point.y && top > hit.point.y - 0.1) g.position.y -= top - (hit.point.y - 0.1);
+  }
+}
 function commit() {
   autoJoin();
+  hangLights();
   const s = JSON.stringify(serialize());
   if (hist[hi] === s) { refresh(); return; }   // same plan, but the objects may have been rebuilt (e.g. sample reloaded): redraw the lists
   hist = hist.slice(0, hi + 1);
