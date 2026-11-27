@@ -654,7 +654,6 @@ body.viewer .vw-choices:not([hidden]) { display: grid; gap: 8px; position: absol
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -3642,7 +3641,22 @@ vpEl.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+/* Reflections from an outdoor sky rather than a bright studio room: blue above, warm haze at the horizon, grass
+   below. Much softer, so white fabrics keep their folds instead of burning out. */
+function skyEnv() {
+  const env = new THREE.Scene(), geo = new THREE.SphereGeometry(50, 32, 16), p = geo.attributes.position, col = [];
+  const top = new THREE.Color('#8fb3de'), hor = new THREE.Color('#f1e8d8'), gnd = new THREE.Color('#5d6a45');
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i) / 50, c = y > 0 ? hor.clone().lerp(top, Math.pow(y, 0.6)) : hor.clone().lerp(gnd, Math.min(1, -y * 4));
+    col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  env.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const t = pmrem.fromScene(env, 0.02).texture;
+  geo.dispose();
+  return t;
+}
+scene.environment = skyEnv();
 
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 800);
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -3679,14 +3693,15 @@ function walk(fwd, side) {
   orbit.target.add(_mv); camera.position.add(_mv);
 }
 
-const sun = new THREE.DirectionalLight(0xffffff, 1.25);
-sun.position.set(8, 16, 6);
+const DAY = { sun: 2.4, hemi: 0.55 }, SUN_DIR = [10, 11, 7];   // late-afternoon sun: warmer, longer shadows
+const sun = new THREE.DirectionalLight(0xffffff, DAY.sun);
+sun.position.set(...SUN_DIR);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
-const hemi = new THREE.HemisphereLight(0xffffff, 0x445066, 0.35);
-sun.color.set('#fff3e2');
+const hemi = new THREE.HemisphereLight('#d4e3f5', '#7b8858', DAY.hemi);
+sun.color.set('#ffe9cc');
 sun.shadow.radius = 3;
 scene.add(sun, sun.target, hemi);
 let night = false;
@@ -3705,13 +3720,19 @@ composer.addPass(new ShaderPass({
 const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.2, 0.3, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// Ground all round the plan, fading into the haze at the horizon: meadow outdoors, light grey around a hall.
+const meadowColor = () => { try { return room.type === 'salle' ? '#cfd2d4' : '#a7b383'; } catch (e) { return '#a7b383'; } };   // room is set up further down
+const meadow = new THREE.Mesh(new THREE.CircleGeometry(420, 72).rotateX(-PI / 2), new THREE.MeshStandardMaterial({ color: '#a7b383', roughness: 1 }));
+meadow.position.y = -0.05; meadow.receiveShadow = true; scene.add(meadow);
 function setLook() {
   // Day: crisp sun with a light glow on bulbs. Night: moonlit blue fill, bright bloom, visible beams.
   Object.assign(bloom, night ? { strength: 0.45, radius: 0.4, threshold: 1.25 } : { strength: 0.2, radius: 0.3, threshold: 1.6 });
   BEAM.strength.value = night ? 0.25 : 0.06;
-  renderer.toneMappingExposure = night ? 1.0 : 0.95;
-  sun.color.set(night ? '#7f98d6' : '#fff3e2');
-  hemi.color.set(night ? '#30406e' : '#ffffff');
+  renderer.toneMappingExposure = 1.0;
+  sun.color.set(night ? '#7f98d6' : '#ffe9cc');
+  hemi.color.set(night ? '#30406e' : '#d4e3f5');
+  hemi.groundColor.set(night ? '#10141f' : '#7b8858');
+  meadow.material.color.set(night ? '#4b5640' : meadowColor());
 }
 setLook();
 
@@ -3745,13 +3766,14 @@ function makeSky(top, bottom) {
 function applyTheme() {
   const cs = getComputedStyle(document.documentElement);
   const tok = (n) => cs.getPropertyValue(n).trim();
-  const top = night ? '#050813' : tok('--sky-top'), bottom = night ? '#121a2c' : tok('--sky-bottom');
+  const top = night ? '#050813' : '#86ade0', bottom = night ? '#121a2c' : '#e9eef1';   // a real sky, whatever the interface theme
   skyTex?.dispose();
   skyTex = makeSky(top, bottom);
   scene.background = skyTex;
   scene.fog = new THREE.Fog(bottom, scene.fog?.near ?? 60, scene.fog?.far ?? 190);   // keeps the range set for the venue size
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
-  grid = new THREE.GridHelper(400, 200, tok('--grid1'), tok('--grid2'));
+  grid = new THREE.GridHelper(120, 120, '#6f7b5a', '#8e9a74');   // 1 m squares, faint on the grass
+  grid.material.transparent = true; grid.material.opacity = 0.28;
   grid.position.y = -0.03;
   scene.add(grid);
   selBox.material.color.set(tok('--accent'));
@@ -4182,6 +4204,8 @@ function buildRoom() {
   if (VENUES[room.type]) Object.assign(room, { w: VENUES[room.type].w, d: VENUES[room.type].d });
   const { type, w, d } = room;
   catcher.visible = type === 'aucun';
+  meadow.visible = type !== 'aucun';
+  meadow.material.color.set(night ? '#4b5640' : meadowColor());
   if (VENUES[type]) VENUES[type].build(roomGroup);
   else if (type !== 'aucun') {
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), new THREE.MeshStandardMaterial({ color: FLOOR[type], roughness: 0.85 }));
@@ -4208,12 +4232,29 @@ function buildRoom() {
   const s = Math.max(w, d) / 2 + 6;
   if (scene.fog) { scene.fog.near = Math.max(60, s * 2); scene.fog.far = Math.max(190, s * 5); }   // big venues stay clear of the haze
   Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, far: Math.max(80, s * 4) });
-  sun.position.set(8, 16, 6).setLength(Math.max(19, s * 1.6));   // far enough above tall venues
+  sun.position.set(...SUN_DIR).setLength(Math.max(19, s * 1.6));   // far enough above tall venues
   sun.shadow.camera.updateProjectionMatrix();
   $('#roomType').value = type;
   setVal('#roomW', w); setVal('#roomD', d);
 }
 
+/* Client view on arrival: framed on the tents (or on the whole set-up when there is none), seen from three-quarters
+   at the height of a first-floor window, turning slowly until the client takes the view in hand. */
+const COVERS = ['stretch', 'toile', 'tent', 'pagode', 'shade', 'guinguette', 'fairy'];
+function clientView() {
+  let pick = objects.filter((o) => o.visible && COVERS.includes(o.userData.kind));
+  if (!pick.length) pick = objects.filter((o) => o.visible);
+  if (!pick.length) { view(false); return; }
+  const box = new THREE.Box3(), c = new THREE.Vector3(), size = new THREE.Vector3();
+  for (const o of pick) box.expandByObject(o);
+  box.getCenter(c); box.getSize(size);
+  const r = Math.max(size.x, size.z, 6), d = r * 1.05 + 5;
+  orbit.target.set(c.x, Math.min(1.5, size.y / 3), c.z);
+  camera.position.set(c.x + d * 0.62, Math.max(4, d * 0.38), c.z + d * 0.78);
+  orbit.autoRotate = true; orbit.autoRotateSpeed = 0.45;
+  const stop = () => { orbit.autoRotate = false; orbit.removeEventListener('start', stop); };
+  orbit.addEventListener('start', stop);
+}
 function view(top = false) {
   const s = Math.max(room.w, room.d) + 4;
   orbit.target.set(0, 0, 0);
@@ -4593,8 +4634,8 @@ $('#btnRedo').addEventListener('click', redo);
 function toggleNight() {
   night = !night;
   $('#btnNight').setAttribute('aria-pressed', String(night));
-  sun.intensity = night ? 0.12 : 1.25;
-  hemi.intensity = night ? 0.07 : 0.35;
+  sun.intensity = night ? 0.12 : DAY.sun;
+  hemi.intensity = night ? 0.07 : DAY.hemi;
   setLook();
   scene.environment = night ? null : envTex;
   applyTheme();
@@ -5714,7 +5755,7 @@ if (VIEW) {
     load(data);
     $('#vwName').textContent = data.event?.name || 'Votre événement';
     $('#vwSub').textContent = ['Plan 3D Oravis', data.event?.date ? new Date(data.event.date + 'T12:00').toLocaleDateString('fr-FR', { dateStyle: 'long' }) : ''].filter(Boolean).join(' · ');
-    view(false); commit(); refresh();
+    clientView(); commit(); refresh();
     // items the client may add or leave out: one switch each, starting as the plan was sent
     const opts = objects.filter((o) => o.userData.choice);
     $('#vwChoices').hidden = !opts.length;
